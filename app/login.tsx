@@ -2,7 +2,10 @@ import { auth } from "@/services/firebase";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput } from "react-native";
+// SafeAreaView automatically adds padding so content doesn't overlap
+// the phone's notch, camera cutout, or status bar.
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -32,7 +35,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={styles.container}>
+     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Welcome Back</Text>
 
       <TextInput
@@ -58,7 +61,7 @@ export default function LoginScreen() {
       <Pressable onPress={() => router.push("/register")}>
         <Text style={styles.link}>Don't have an account? Register</Text>
       </Pressable>
-    </View>
+    </SafeAreaView>
   );
 }
 

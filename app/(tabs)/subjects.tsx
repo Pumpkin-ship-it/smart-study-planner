@@ -14,12 +14,18 @@ import {
 import { useCallback, useState } from "react";
 import {
   Alert,
-  FlatList, Platform, Pressable,
+  FlatList,
+  Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
-  View
+  View,
 } from "react-native";
+// SafeAreaView automatically adds padding so content doesn't overlap
+// the phone's notch, camera cutout, or status bar. Only used ONCE,
+// as the outermost container of the screen.
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SubjectsScreen() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -114,31 +120,32 @@ export default function SubjectsScreen() {
   }
 
   function handleDelete(id: string) {
-  // Alert.alert's multi-button confirmation doesn't work reliably on web,
-  // so we use the browser's built-in confirm() there, and the native
-  // Alert on iOS/Android.
-  if (Platform.OS === "web") {
-    const confirmed = window.confirm("Delete this subject? This cannot be undone.");
-    if (confirmed) {
-      deleteDoc(doc(db, "subjects", id)).then(() => loadSubjects());
-    }
-  } else {
-    Alert.alert("Delete subject", "Are you sure? This cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await deleteDoc(doc(db, "subjects", id));
-          loadSubjects();
+    // Alert.alert's multi-button confirmation doesn't work reliably on web,
+    // so we use the browser's built-in confirm() there, and the native
+    // Alert on iOS/Android.
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm("Delete this subject? This cannot be undone.");
+      if (confirmed) {
+        deleteDoc(doc(db, "subjects", id)).then(() => loadSubjects());
+      }
+    } else {
+      Alert.alert("Delete subject", "Are you sure? This cannot be undone.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteDoc(doc(db, "subjects", id));
+            loadSubjects();
+          },
         },
-      },
-    ]);
+      ]);
+    }
   }
-}
 
   return (
-    <View style={styles.container}>
+    // Outer container - this is the ONLY SafeAreaView on this screen.
+    <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Subjects</Text>
 
       {/* Add / Edit form */}
@@ -195,7 +202,7 @@ export default function SubjectsScreen() {
           </View>
         )}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
