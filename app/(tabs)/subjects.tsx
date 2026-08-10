@@ -1,5 +1,6 @@
-import { auth, db } from "@/services/firebase";
+﻿import { auth, db } from "@/services/firebase";
 import { Subject } from "@/types";
+import { getSubjectColor } from "@/utils/subjectColors";
 import { useFocusEffect } from "expo-router";
 import {
   addDoc,
@@ -23,8 +24,8 @@ import {
   View,
 } from "react-native";
 // SafeAreaView automatically adds padding so content doesn't overlap
-// the phone's notch, camera cutout, or status bar. Only used ONCE,
-// as the outermost container of the screen.
+// the phone's notch, camera cutout, or status bar. Used ONCE, as the
+// outermost container of the screen.
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SubjectsScreen() {
@@ -187,20 +188,28 @@ export default function SubjectsScreen() {
             <Text style={styles.emptyText}>No subjects yet. Add one above.</Text>
           ) : null
         }
-        renderItem={({ item }) => (
-          <View style={styles.subjectCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.subjectName}>{item.name}</Text>
-              {item.code ? <Text style={styles.subjectCode}>{item.code}</Text> : null}
+        renderItem={({ item }) => {
+          // Each subject gets its own consistent color, matching the
+          // Progress screen, so the same subject always looks the same
+          // color everywhere in the app.
+          const color = getSubjectColor(item.id);
+          return (
+            <View style={styles.subjectCard}>
+              {/* Colored dot identifying this subject */}
+              <View style={[styles.colorDot, { backgroundColor: color }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.subjectName}>{item.name}</Text>
+                {item.code ? <Text style={styles.subjectCode}>{item.code}</Text> : null}
+              </View>
+              <Pressable onPress={() => handleEdit(item)} style={styles.iconButton}>
+                <Text style={styles.iconText}>Edit</Text>
+              </Pressable>
+              <Pressable onPress={() => handleDelete(item.id)} style={styles.iconButton}>
+                <Text style={[styles.iconText, { color: "#dc2626" }]}>Delete</Text>
+              </Pressable>
             </View>
-            <Pressable onPress={() => handleEdit(item)} style={styles.iconButton}>
-              <Text style={styles.iconText}>Edit</Text>
-            </Pressable>
-            <Pressable onPress={() => handleDelete(item.id)} style={styles.iconButton}>
-              <Text style={[styles.iconText, { color: "#dc2626" }]}>Delete</Text>
-            </Pressable>
-          </View>
-        )}
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -266,7 +275,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     backgroundColor: "#fafafa",
+    gap: 10,
   },
+  colorDot: { width: 12, height: 12, borderRadius: 6 },
   subjectName: {
     fontSize: 16,
     fontWeight: "600",
