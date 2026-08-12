@@ -83,7 +83,7 @@ export default function RewardsScreen() {
 
   if (!loading && !stats.heroId) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
         <Text style={styles.title}>Choose Your Hero</Text>
         <Text style={styles.subtitle}>
           Your hero grows as you level up by completing assessments.
@@ -106,7 +106,7 @@ export default function RewardsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>Rewards</Text>
 
       {stats.heroId && (
@@ -249,3 +249,4 @@ const styles = StyleSheet.create({
   badgeNameLocked: { color: "#999999" },
   badgeDescription: { fontSize: 11, color: "#666666", marginTop: 2 },
 });
+

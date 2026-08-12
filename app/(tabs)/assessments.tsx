@@ -262,7 +262,7 @@ export default function AssessmentsScreen() {
 
   if (subjects.length === 0 && !loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
         <Text style={styles.title}>Assessments</Text>
         <Text style={styles.emptyText}>
           You need to add a subject first before creating assessments. Go to the Subjects tab.
@@ -272,7 +272,7 @@ export default function AssessmentsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>Assessments</Text>
       <View style={styles.form}>
         <TextInput
@@ -336,9 +336,11 @@ export default function AssessmentsScreen() {
         </View>
       </View>
       <FlatList
+        style={{ flex: 1 }}
         data={assessments}
         keyExtractor={(item) => item.id}
         refreshing={loading}
+        contentContainerStyle={{ paddingBottom: 40 }}
         onRefresh={loadData}
         ListEmptyComponent={
           !loading ? <Text style={styles.emptyText}>No assessments yet.</Text> : null
@@ -439,4 +441,7 @@ const styles = StyleSheet.create({
   iconText: { color: "#2563eb", fontWeight: "600" },
   emptyText: { textAlign: "center", color: "#999999", marginTop: 32, paddingHorizontal: 16 },
 });
+
+
+
 

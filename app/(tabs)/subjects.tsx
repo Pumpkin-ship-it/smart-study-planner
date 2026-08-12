@@ -146,7 +146,7 @@ export default function SubjectsScreen() {
 
   return (
     // Outer container - this is the ONLY SafeAreaView on this screen.
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>Subjects</Text>
 
       {/* Add / Edit form */}
@@ -179,9 +179,11 @@ export default function SubjectsScreen() {
 
       {/* List of subjects */}
       <FlatList
+        style={{ flex: 1 }}
         data={subjects}
         keyExtractor={(item) => item.id}
         refreshing={loading}
+        contentContainerStyle={{ paddingBottom: 40 }}
         onRefresh={loadSubjects}
         ListEmptyComponent={
           !loading ? (
@@ -302,4 +304,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
 });
+
+
+
 
