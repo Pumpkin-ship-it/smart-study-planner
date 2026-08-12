@@ -1,15 +1,18 @@
 ﻿import { auth, db } from "@/services/firebase";
-import { Assessment, Subject } from "@/types";
+import { Assessment, GamificationStats, Subject } from "@/types";
 import { showAlert } from "@/utils/alert";
 import { dueDateLabel, getUrgencyLevel } from "@/utils/dueDate";
+import { BADGES, checkNewBadges, petsUnlockedByBadges, updateStreak, xpForAssessment } from "@/utils/gamification";
 import { useFocusEffect } from "expo-router";
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -46,7 +49,6 @@ function urgencyStyle(dueDate: string) {
   if (level === "soon") return { borderColor: "#166534", backgroundColor: "#86efac" };
   return { borderColor: "#eee", backgroundColor: "#fafafa" };
 }
-
 
 export default function AssessmentsScreen() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
@@ -138,6 +140,7 @@ export default function AssessmentsScreen() {
           estimatedHours: hoursNumber,
           priority,
           completed: false,
+          xpAwarded: false,
           createdAt: new Date().toISOString(),
         });
       }
@@ -178,9 +181,78 @@ export default function AssessmentsScreen() {
     }
   }
 
+  // Toggles an assessment's completed status. Awarding XP/streak/badges/pets
+  // only happens the first time it is marked complete (see awardCompletion).
   async function handleToggleComplete(item: Assessment) {
-    await updateDoc(doc(db, "assessments", item.id), { completed: !item.completed });
+    const newCompleted = !item.completed;
+    await updateDoc(doc(db, "assessments", item.id), { completed: newCompleted });
+
+    if (newCompleted && !item.xpAwarded) {
+      await awardCompletion(item);
+    }
     loadData();
+  }
+
+  // Handles all gamification side-effects of completing an assessment for
+  // the first time: grants XP, updates the daily streak, checks for newly
+  // earned badges, and unlocks any pets tied to those badges.
+  async function awardCompletion(item: Assessment) {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    // Mark this specific assessment so it can never grant XP again,
+    // even if the user un-ticks and re-ticks it later.
+    await updateDoc(doc(db, "assessments", item.id), { xpAwarded: true });
+
+    // Load this user's existing gamification stats, or start fresh
+    // if this is their very first completed assessment.
+    const statsRef = doc(db, "gamification", currentUser.uid);
+    const statsSnap = await getDoc(statsRef);
+    const existing: GamificationStats = statsSnap.exists()
+      ? (statsSnap.data() as GamificationStats)
+      : { userId: currentUser.uid, xp: 0, streak: 0, lastCompletedDate: null, badges: [], heroId: null, pets: [] };
+
+    // Work out today's streak based on when they last completed something.
+    const { streak, today } = updateStreak(existing.lastCompletedDate, existing.streak);
+
+    // Add XP based on this assessment's priority.
+    const newXp = existing.xp + xpForAssessment(item.priority);
+
+    // Total completed count (including this one) is used for milestone badges.
+    const totalCompleted = assessments.filter((a) => a.completed).length + 1;
+
+    const updatedStats: GamificationStats = {
+      ...existing,
+      userId: currentUser.uid,
+      xp: newXp,
+      streak,
+      lastCompletedDate: today,
+    };
+
+    // Check if this update just unlocked any new badges.
+    const newlyEarnedBadges = checkNewBadges(updatedStats, totalCompleted);
+    if (newlyEarnedBadges.length > 0) {
+      updatedStats.badges = [...existing.badges, ...newlyEarnedBadges];
+    }
+
+    // Check if any of those new badges also unlock a pet companion.
+    const newlyEarnedPets = petsUnlockedByBadges(newlyEarnedBadges, existing.pets);
+    if (newlyEarnedPets.length > 0) {
+      updatedStats.pets = [...existing.pets, ...newlyEarnedPets];
+    }
+
+    // Save the updated stats document (creates it if it's the first time).
+    await setDoc(statsRef, updatedStats);
+
+    // Show a quick alert if a new badge (and/or pet) was just unlocked.
+    if (newlyEarnedBadges.length > 0) {
+      const badgeNames = newlyEarnedBadges
+        .map((id) => BADGES.find((b) => b.id === id)?.name)
+        .filter(Boolean)
+        .join(", ");
+      const petText = newlyEarnedPets.length > 0 ? ` New pet: ${newlyEarnedPets.join(", ")}!` : "";
+      showAlert("Badge earned!", badgeNames + petText);
+    }
   }
 
   function subjectName(id: string) {
@@ -205,13 +277,13 @@ export default function AssessmentsScreen() {
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Assessment title (e.g. Midterm Exam)"
+          placeholder="Assessment title (e.g. Midterm Exam)" placeholderTextColor="#999999"
           value={title}
           onChangeText={setTitle}
         />
         <TextInput
           style={styles.input}
-          placeholder="Due date (e.g. 2026-09-15)"
+          placeholder="Due date (e.g. 2026-09-15)" placeholderTextColor="#999999"
           value={dueDate}
           onChangeText={(text) => setDueDate(formatDateInput(text))}
           keyboardType="numeric"
@@ -219,7 +291,7 @@ export default function AssessmentsScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="Estimated hours (e.g. 3)"
+          placeholder="Estimated hours (e.g. 3)" placeholderTextColor="#999999"
           value={estimatedHours}
           onChangeText={setEstimatedHours}
           keyboardType="numeric"
@@ -367,3 +439,4 @@ const styles = StyleSheet.create({
   iconText: { color: "#2563eb", fontWeight: "600" },
   emptyText: { textAlign: "center", color: "#999999", marginTop: 32, paddingHorizontal: 16 },
 });
+

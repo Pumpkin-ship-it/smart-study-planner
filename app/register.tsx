@@ -1,4 +1,4 @@
-import { auth, db } from "@/services/firebase";
+﻿import { auth, db } from "@/services/firebase";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -35,8 +35,9 @@ export default function RegisterScreen() {
         createdAt: new Date().toISOString(),
       });
 
-      // 3. Registration successful — send them to the dashboard.
-      router.replace("/(tabs)/dashboard");
+      // 3. Registration successful - send them to the onboarding screen first,
+      // which then leads into hero selection, instead of straight to the dashboard.
+      router.replace("/onboarding");
     } catch (error: any) {
       // Firebase gives descriptive error messages we can show directly.
       Alert.alert("Registration failed", error.message);
@@ -51,14 +52,14 @@ export default function RegisterScreen() {
 
       <TextInput
         style={styles.input}
-        placeholder="Full Name"
+        placeholder="Full Name" placeholderTextColor="#999999"
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
       />
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Email" placeholderTextColor="#999999"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -66,7 +67,7 @@ export default function RegisterScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder="Password" placeholderTextColor="#999999"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -125,3 +126,4 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 });
+

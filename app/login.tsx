@@ -1,4 +1,4 @@
-import { auth } from "@/services/firebase";
+﻿import { auth } from "@/services/firebase";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
@@ -25,7 +25,7 @@ export default function LoginScreen() {
       // Firebase checks the email/password against the account we created earlier.
       await signInWithEmailAndPassword(auth, email, password);
 
-      // Login successful — go to the dashboard.
+      // Login successful â€” go to the dashboard.
       router.replace("/(tabs)/dashboard");
     } catch (error: any) {
       Alert.alert("Login failed", error.message);
@@ -40,7 +40,7 @@ export default function LoginScreen() {
 
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Email" placeholderTextColor="#999999"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -48,7 +48,7 @@ export default function LoginScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder="Password" placeholderTextColor="#999999"
         value={password}
         onChangeText={setPassword}
         secureTextEntry

@@ -153,13 +153,13 @@ export default function SubjectsScreen() {
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Subject name (e.g. Biology)"
+          placeholder="Subject name (e.g. Biology)" placeholderTextColor="#999999"
           value={name}
           onChangeText={setName}
         />
         <TextInput
           style={styles.input}
-          placeholder="Code (optional, e.g. BIO301)"
+          placeholder="Code (optional, e.g. BIO301)" placeholderTextColor="#999999"
           value={code}
           onChangeText={setCode}
         />
@@ -302,3 +302,4 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
 });
+

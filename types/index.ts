@@ -1,4 +1,4 @@
-// This file defines the "shape" of our core data.
+﻿// This file defines the "shape" of our core data.
 // TypeScript will use these interfaces to check that we always
 // create, read, and update objects with the correct fields and types.
 
@@ -30,4 +30,37 @@ export interface Assessment {
   priority: "low" | "medium" | "high";     // Restricts this field to only these 3 exact values
   completed: boolean;                      // Whether the user has marked this as done
   createdAt: string;                       // Timestamp of when the assessment was added
+  xpAwarded?: boolean;                     // True once XP has been granted for completing this -
+                                            // prevents earning XP repeatedly by toggling complete on/off
+}
+
+// The original (non-copyrighted) hero archetypes the user can choose from.
+export type HeroId = "elf" | "knight" | "mage" | "warrior" | "rogue";
+
+// The original (non-copyrighted) pet companions that can be unlocked via badges.
+export type PetId = "wolf" | "cat" | "dragon" | "fox" | "phoenix";
+
+// Represents one user's gamification progress: XP, streak, earned badges,
+// chosen hero, and unlocked pets. Stored as a single document per user
+// in the "gamification" Firestore collection.
+export interface GamificationStats {
+  userId: string;                    // Links this record to the user
+  xp: number;                        // Total experience points earned so far
+  streak: number;                    // Current consecutive-day completion streak
+  lastCompletedDate: string | null;  // "YYYY-MM-DD" of the last day an assessment was completed
+  badges: string[];                  // IDs of badges this user has earned (see utils/gamification.ts)
+  heroId: HeroId | null;             // Which hero archetype the user picked (null until first chosen)
+  pets: PetId[];                     // Pet IDs unlocked so far, via badge milestones
+}
+
+// Represents a single focus-timer session tied to one assessment.
+// Used by the Focus Timer feature: completing a session without leaving
+// the app grants bonus XP; leaving early fails the session (no reward).
+export interface FocusSession {
+  id: string;             // Unique ID for this session
+  userId: string;         // Links this session to the user who ran it
+  assessmentId: string;   // Which assessment this focus session was for
+  durationMinutes: number; // Planned length of the session
+  startedAt: string;      // Timestamp when the session began
+  completed: boolean;     // True if the user stayed in-app for the full duration
 }

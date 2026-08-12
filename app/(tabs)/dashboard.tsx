@@ -1,10 +1,10 @@
 ﻿import { auth, db } from "@/services/firebase";
 import { Assessment } from "@/types";
 import { dueDateLabel, getUrgencyLevel } from "@/utils/dueDate";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { useCallback, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 // SafeAreaView automatically adds padding so content doesn't overlap
 // the phone's notch, camera cutout, or status bar.
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,6 +21,7 @@ function urgencyStyle(dueDate: string) {
 }
 
 export default function DashboardScreen() {
+  const router = useRouter();
   // The user's assessments, loaded fresh each time this screen is focused.
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,8 +84,16 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Dashboard</Text>
-      <Text style={styles.subtitle}>Welcome back, {userName}</Text>
+      {/* Header row: title + welcome message on the left, profile icon on the right */}
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.title}>Dashboard</Text>
+          <Text style={styles.subtitle}>Welcome back, {userName}</Text>
+        </View>
+        <Pressable style={styles.profileButton} onPress={() => router.push("/profile")}>
+          <Text style={styles.profileButtonText}>Profile</Text>
+        </Pressable>
+      </View>
 
       {/* Summary row - quick at-a-glance stats */}
       <View style={styles.summaryRow}>
@@ -136,8 +145,21 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffff", padding: 16 },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
   title: { fontSize: 24, fontWeight: "bold", color: "#111111" },
-  subtitle: { fontSize: 14, color: "#666666", marginTop: 2, marginBottom: 16 },
+  subtitle: { fontSize: 14, color: "#666666", marginTop: 2 },
+  profileButton: {
+    backgroundColor: "#f3f4f6",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  profileButtonText: { color: "#111111", fontWeight: "600", fontSize: 12 },
   summaryRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
   summaryCard: {
     flex: 1,
