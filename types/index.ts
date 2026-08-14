@@ -81,3 +81,14 @@ export interface FocusSession {
   completed: boolean;     // True if the user stayed in-app for the full duration
 }
 
+// Represents a single journal-style note tied to a subject. A subject can
+// have many notes, each timestamped, shown newest-first.
+export interface Note {
+  id: string;             // Unique ID for this note
+  userId: string;         // Links this note to the user who wrote it
+  subjectId: string;      // Which subject this note belongs to
+  content: string;        // The note text itself
+  createdAt: string;      // ISO timestamp of when the note was added
+}
+
+

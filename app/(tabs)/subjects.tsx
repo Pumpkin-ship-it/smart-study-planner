@@ -2,7 +2,7 @@
 import { Subject } from "@/types";
 import { useTheme } from "@/components/ThemeContext";
 import { buildSubjectColorMap } from "@/utils/subjectColors";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   addDoc,
   collection,
@@ -24,12 +24,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 // SafeAreaView automatically adds padding so content doesn't overlap
 // the phone's notch, camera cutout, or status bar. Used ONCE, as the
 // outermost container of the screen.
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SubjectsScreen() {
+  const router = useRouter();
   const { theme } = useTheme();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,11 +217,22 @@ export default function SubjectsScreen() {
                 <Text style={styles.subjectName}>{item.name}</Text>
                 {item.code ? <Text style={styles.subjectCode}>{item.code}</Text> : null}
               </View>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/notes/[subjectId]",
+                    params: { subjectId: item.id, subjectName: item.name },
+                  })
+                }
+                style={styles.iconButton}
+              >
+                <Text style={[styles.iconText, { color: "#1e293b" }]}>Notes</Text>
+              </Pressable>
               <Pressable onPress={() => handleEdit(item)} style={styles.iconButton}>
-                <Text style={[styles.iconText, { color: theme.primary }]}>Edit</Text>
+                <Text style={[styles.iconText, { color: "#1e293b" }]}>Edit</Text>
               </Pressable>
               <Pressable onPress={() => handleDelete(item.id)} style={styles.iconButton}>
-                <Text style={[styles.iconText, { color: "#dc2626" }]}>Delete</Text>
+                <Ionicons name="trash-outline" size={18} color="#dc2626" />
               </Pressable>
             </View>
           );
@@ -314,4 +327,8 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
 });
+
+
+
+
 

@@ -28,6 +28,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const PRIORITIES: Assessment["priority"][] = ["low", "medium", "high"];
@@ -61,6 +63,7 @@ export default function AssessmentsScreen() {
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [estimatedHours, setEstimatedHours] = useState("");
   const [priority, setPriority] = useState<Assessment["priority"]>("medium");
   const [subjectId, setSubjectId] = useState<string | null>(null);
@@ -346,6 +349,11 @@ export default function AssessmentsScreen() {
     }
   }
 
+  // Only show assessments that are NOT completed - completed ones are
+  // hidden from this list, but still counted in Rewards/stats since we
+  // never delete the underlying data.
+  const pendingAssessments = assessments.filter((a) => !a.completed);
+
   function subjectName(id: string) {
     const found = subjects.find((s) => s.id === id);
     return found ? found.name : "Unknown subject";
@@ -373,15 +381,24 @@ export default function AssessmentsScreen() {
           value={title}
           onChangeText={setTitle}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Due date (e.g. 2026-09-15)"
-          placeholderTextColor="#999999"
-          value={dueDate}
-          onChangeText={(text) => setDueDate(formatDateInput(text))}
-          keyboardType="numeric"
-          maxLength={10}
-        />
+        <Pressable style={styles.input} onPress={() => setShowDatePicker(true)}>
+          <Text style={dueDate ? styles.dateButtonTextFilled : styles.dateButtonTextPlaceholder}>
+            {dueDate || "Due date (tap to select)"}
+          </Text>
+        </Pressable>
+        {showDatePicker && (
+          <DateTimePicker
+            value={dueDate ? new Date(dueDate + "T00:00:00") : new Date()}
+            mode="date"
+            display="default"
+            onChange={(event, selectedDate) => {
+              setShowDatePicker(false);
+              if (event.type === "set" && selectedDate) {
+                setDueDate(selectedDate.toISOString().slice(0, 10));
+              }
+            }}
+          />
+        )}
         <TextInput
           style={styles.input}
           placeholder="Estimated hours (e.g. 3)"
@@ -440,7 +457,7 @@ export default function AssessmentsScreen() {
       </View>
       <FlatList
         style={{ flex: 1 }}
-        data={assessments}
+        data={pendingAssessments}
         keyExtractor={(item) => item.id}
         refreshing={loading}
         onRefresh={loadData}
@@ -476,7 +493,7 @@ export default function AssessmentsScreen() {
               <Text style={[styles.iconText, { color: "#1e293b" }]}>Edit</Text>
             </Pressable>
             <Pressable onPress={() => handleDelete(item.id)} style={styles.iconButton}>
-              <Text style={[styles.iconText, { color: "#dc2626" }]}>Delete</Text>
+              <Ionicons name="trash-outline" size={18} color="#dc2626" />
             </Pressable>
           </View>
         )}
@@ -498,6 +515,8 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     backgroundColor: "#ffffff",
   },
+  dateButtonTextPlaceholder: { color: "#999999", fontSize: 16 },
+  dateButtonTextFilled: { color: "#1e293b", fontSize: 16 },
   label: { fontSize: 13, color: "#64748b", marginTop: 4 },
   rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
@@ -544,6 +563,10 @@ const styles = StyleSheet.create({
   iconText: { fontWeight: "600" },
   emptyText: { textAlign: "center", color: "#94a3b8", marginTop: 32, paddingHorizontal: 16 },
 });
+
+
+
+
 
 
 

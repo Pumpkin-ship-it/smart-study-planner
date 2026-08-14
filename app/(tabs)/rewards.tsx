@@ -50,6 +50,7 @@ export default function RewardsScreen() {
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [completedCount, setCompletedCount] = useState(0);
+  const [assessmentXpTotal, setAssessmentXpTotal] = useState(0);
   const [recentCompletions, setRecentCompletions] = useState<{ id: string; title: string; xp: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,6 +85,7 @@ export default function RewardsScreen() {
       })) as Assessment[];
       const completed = assessments.filter((a) => a.completed);
       setCompletedCount(completed.length);
+      setAssessmentXpTotal(completed.reduce((sum, a) => sum + xpForAssessment(a.priority), 0));
 
       const recent = [...completed]
         .filter((a) => a.completedAt)
@@ -265,10 +267,17 @@ export default function RewardsScreen() {
 
         <Text style={[styles.sectionHeader, { marginTop: 20 }]}>Recent Rewards</Text>
         <View style={styles.recentRewardsBlock}>
+          {/* Left side: what happened. Right side: the XP tied to that
+              event - completed assessments show their real earned XP,
+              streak reflects total XP (overall consistency), and level
+              shows how much XP is needed for the next one. */}
           <View style={styles.recentRewardRow}>
             <Text style={styles.recentRewardIcon}>[Done]</Text>
             <Text style={styles.recentRewardText}>
               {completedCount} assessment{completedCount === 1 ? "" : "s"} completed
+            </Text>
+            <Text style={[styles.xpGainText, { color: theme.primary }]}>
+              +{assessmentXpTotal} XP
             </Text>
           </View>
           {stats.streak > 0 && (
@@ -277,31 +286,19 @@ export default function RewardsScreen() {
               <Text style={styles.recentRewardText}>
                 {stats.streak}-day streak going strong
               </Text>
+              <Text style={[styles.xpGainText, { color: theme.primary }]}>
+                {stats.xp} XP
+              </Text>
             </View>
           )}
           <View style={styles.recentRewardRow}>
             <Text style={styles.recentRewardIcon}>[Up]</Text>
             <Text style={styles.recentRewardText}>Reached Level {level}</Text>
+            <Text style={[styles.xpGainText, { color: theme.primary }]}>
+              {xpForNextLevel - currentLevelXp} to next
+            </Text>
           </View>
         </View>
-
-        {recentCompletions.length > 0 && (
-          <View style={[styles.recentRewardsBlock, { marginTop: 10 }]}>
-            {recentCompletions.map((item) => (
-              <View key={item.id} style={styles.xpRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.xpRowCategory}>Completed Assessment</Text>
-                  <Text style={styles.xpRowLabel} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                </View>
-                <Text style={[styles.xpGainText, { color: theme.primary }]}>
-                  +{item.xp} XP
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
 
         <View style={styles.userInfoSection}>
           <Text style={styles.userInfoLabel}>Signed in as</Text>
@@ -440,6 +437,8 @@ const styles = StyleSheet.create({
   },
   logoutButtonText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });
+
+
 
 
 

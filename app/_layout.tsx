@@ -38,6 +38,7 @@ export default function RootLayout() {
           <Stack.Screen name="focus-timer" options={{ headerShown: false }} />
           <Stack.Screen name="verify-email" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+          <Stack.Screen name="notes/[subjectId]" options={{ headerShown: false }} />
         </Stack>
         {/* "auto" makes the status bar icons light or dark depending on device theme */}
         <StatusBar style="auto" />
@@ -45,4 +46,5 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
 
