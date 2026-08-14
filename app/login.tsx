@@ -3,7 +3,16 @@ import { useTheme } from "@/components/ThemeContext";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -34,6 +43,8 @@ export default function LoginScreen() {
   }
 
   return (
+    // Tapping anywhere outside a text input dismisses the keyboard.
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
     <View style={styles.container}>
       <Text style={styles.title}>Welcome Back</Text>
 
@@ -55,6 +66,10 @@ export default function LoginScreen() {
         secureTextEntry
       />
 
+      <Pressable onPress={() => router.push("/forgot-password")}>
+        <Text style={[styles.forgotPasswordLink, { color: theme.primary }]}>Forgot password?</Text>
+      </Pressable>
+
       {/* Button color now follows the user's chosen app theme, instead
           of a hardcoded blue that ignored their theme choice. */}
       <Pressable
@@ -69,6 +84,7 @@ export default function LoginScreen() {
         <Text style={[styles.link, { color: theme.primary }]}>Don't have an account? Register</Text>
       </Pressable>
     </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -111,4 +127,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 16,
   },
+  forgotPasswordLink: {
+    textAlign: "right",
+    fontSize: 13,
+    marginTop: -4,
+  },
 });
+
+

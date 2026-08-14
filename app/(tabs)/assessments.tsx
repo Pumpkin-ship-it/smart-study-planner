@@ -3,7 +3,7 @@ import { Assessment, GamificationStats, Subject } from "@/types";
 import { useTheme } from "@/components/ThemeContext";
 import { showAlert } from "@/utils/alert";
 import { dueDateLabel, getUrgencyLevel } from "@/utils/dueDate";
-import { BADGES, checkNewBadges, petsUnlockedByBadges, updateStreak, xpForAssessment } from "@/utils/gamification";
+import { BADGES, checkNewBadges, petUnlockedByLevel, updateStreak, xpForAssessment, applyStarGain, applyStarLoss, calculateLevel } from "@/utils/gamification";
 import { useFocusEffect } from "expo-router";
 import {
   addDoc,
@@ -66,6 +66,59 @@ export default function AssessmentsScreen() {
   const [subjectId, setSubjectId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  async function penalizeOverdueAssessments(overdueItems: Assessment[]) {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    // Mark each one so it never gets penalized again on future loads.
+    await Promise.all(
+      overdueItems.map((item) =>
+        updateDoc(doc(db, "assessments", item.id), { overduePenalized: true })
+      )
+    );
+
+    const statsRef = doc(db, "gamification", currentUser.uid);
+    const statsSnap = await getDoc(statsRef);
+    const emptyStats: GamificationStats = {
+      userId: currentUser.uid,
+      xp: 0,
+      streak: 0,
+      lastCompletedDate: null,
+      badges: [],
+      heroId: null,
+      pets: [],
+      rankTier: 0,
+      rankStars: 0,
+      assessmentGainProgress: 0,
+      assessmentLossProgress: 0,
+      focusGainProgress: 0,
+      focusLossProgress: 0,
+      totalStarsEarned: 0,
+    };
+    const existing: GamificationStats = statsSnap.exists()
+      ? { ...emptyStats, ...(statsSnap.data() as Partial<GamificationStats>) }
+      : emptyStats;
+
+    // Apply one loss-progress unit per newly-overdue assessment - every
+    // 2 overdue items costs a full star.
+    let progress = existing.assessmentLossProgress;
+    let tier = existing.rankTier;
+    let stars = existing.rankStars;
+    for (let i = 0; i < overdueItems.length; i++) {
+      const result = applyStarLoss(progress, tier, stars);
+      progress = result.progress;
+      tier = result.rankTier;
+      stars = result.rankStars;
+    }
+
+    await setDoc(statsRef, {
+      ...existing,
+      assessmentLossProgress: progress,
+      rankTier: tier,
+      rankStars: stars,
+    });
+  }
+
   async function loadData() {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -91,6 +144,18 @@ export default function AssessmentsScreen() {
       }));
       loadedAssessments.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
       setAssessments(loadedAssessments);
+
+      // Check for any assessments that have newly become overdue (past
+      // their due date, still incomplete, not yet penalized) and deduct
+      // rank star progress for each - this only ever happens ONCE per
+      // assessment, thanks to the overduePenalized flag.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const newlyOverdue = loadedAssessments.filter(
+        (a) => !a.completed && a.dueDate < todayStr && !a.overduePenalized
+      );
+      if (newlyOverdue.length > 0) {
+        await penalizeOverdueAssessments(newlyOverdue);
+      }
     } catch (error: any) {
       showAlert("Error loading data", error.message);
     } finally {
@@ -216,6 +281,13 @@ export default function AssessmentsScreen() {
       badges: [],
       heroId: null,
       pets: [],
+      rankTier: 0,
+      rankStars: 0,
+      assessmentGainProgress: 0,
+      assessmentLossProgress: 0,
+      focusGainProgress: 0,
+      focusLossProgress: 0,
+      totalStarsEarned: 0,
     };
     // Merge with defaults so any fields missing from an older Firestore
     // document (e.g. accounts created before pets/heroId existed) get
@@ -236,13 +308,30 @@ export default function AssessmentsScreen() {
       lastCompletedDate: today,
     };
 
+    // Award rank star progress if this assessment was completed ON TIME
+    // (completed date on or before its due date). Every 2 on-time
+    // completions grants a full star.
+    const completedOnTime = today <= item.dueDate;
+    if (completedOnTime) {
+      const result = applyStarGain(
+        existing.assessmentGainProgress,
+        existing.rankTier,
+        existing.rankStars,
+        existing.totalStarsEarned ?? 0
+      );
+      updatedStats.assessmentGainProgress = result.progress;
+      updatedStats.rankTier = result.rankTier;
+      updatedStats.rankStars = result.rankStars;
+      updatedStats.totalStarsEarned = result.totalStarsEarned;
+    }
+
     const newlyEarnedBadges = checkNewBadges(updatedStats, totalCompleted);
     if (newlyEarnedBadges.length > 0) {
       updatedStats.badges = [...existing.badges, ...newlyEarnedBadges];
     }
-    const newlyEarnedPets = petsUnlockedByBadges(newlyEarnedBadges, existing.pets);
-    if (newlyEarnedPets.length > 0) {
-      updatedStats.pets = [...existing.pets, ...newlyEarnedPets];
+    const newPet = petUnlockedByLevel(updatedStats.xp, existing.pets);
+    if (newPet) {
+      updatedStats.pets = [...existing.pets, newPet];
     }
 
     await setDoc(statsRef, updatedStats);
@@ -455,6 +544,11 @@ const styles = StyleSheet.create({
   iconText: { fontWeight: "600" },
   emptyText: { textAlign: "center", color: "#94a3b8", marginTop: 32, paddingHorizontal: 16 },
 });
+
+
+
+
+
 
 
 

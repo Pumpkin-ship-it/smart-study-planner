@@ -3,20 +3,20 @@ import { useTheme } from "@/components/ThemeContext";
 import { HeroFigure } from "@/components/HeroFigure";
 import { StreakWeekDay } from "@/components/StreakWeekDay";
 import { getStreakWeek } from "@/utils/dueDate";
-import { Assessment, GamificationStats, HeroId, PetId } from "@/types";
-import { BADGES, calculateLevel, levelProgress, xpForAssessment } from "@/utils/gamification";
+import { Assessment, GamificationStats, HeroId } from "@/types";
+import { BADGES, calculateLevel, levelProgress, getNextLevelReward, xpForAssessment } from "@/utils/gamification";
 import { useFocusEffect, useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { useCallback, useState } from "react";
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 // SafeAreaView automatically adds padding so content doesn't overlap
 // the phone's notch, camera cutout, or status bar.
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Default stats shown before the user has completed anything yet, and also
 // used to fill in any fields missing from OLDER Firestore documents that
-// were created before heroId/pets existed in our data model.
+// were created before newer fields existed in our data model.
 const EMPTY_STATS: GamificationStats = {
   userId: "",
   xp: 0,
@@ -25,6 +25,13 @@ const EMPTY_STATS: GamificationStats = {
   badges: [],
   heroId: null,
   pets: [],
+  rankTier: 0,
+  rankStars: 0,
+  assessmentGainProgress: 0,
+  assessmentLossProgress: 0,
+  focusGainProgress: 0,
+  focusLossProgress: 0,
+  totalStarsEarned: 0,
 };
 
 const HERO_OPTIONS: { id: HeroId; name: string; description: string }[] = [
@@ -34,14 +41,6 @@ const HERO_OPTIONS: { id: HeroId; name: string; description: string }[] = [
   { id: "warrior", name: "Warrior", description: "Bold and relentless." },
   { id: "rogue", name: "Rogue", description: "Quick and resourceful." },
 ];
-
-const PET_LABELS: Record<PetId, string> = {
-  wolf: "Wolf",
-  cat: "Cat",
-  fox: "Fox",
-  dragon: "Dragon",
-  phoenix: "Phoenix",
-};
 
 export default function RewardsScreen() {
   const router = useRouter();
@@ -54,8 +53,8 @@ export default function RewardsScreen() {
   const [recentCompletions, setRecentCompletions] = useState<{ id: string; title: string; xp: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Loads this user's gamification stats, basic profile info, and how
-  // many assessments they've completed (used in the Recent Rewards summary).
+  // Loads this user's gamification stats, basic profile info, and
+  // completed-assessment stats used in the Recent Rewards summary.
   async function loadStats() {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -79,13 +78,13 @@ export default function RewardsScreen() {
       const assessmentsSnap = await getDocs(
         query(collection(db, "assessments"), where("userId", "==", currentUser.uid))
       );
-      const assessments = assessmentsSnap.docs.map((d) => d.data() as Assessment);
+      const assessments = assessmentsSnap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Assessment, "id">),
+      })) as Assessment[];
       const completed = assessments.filter((a) => a.completed);
       setCompletedCount(completed.length);
 
-      // Most recently completed assessments (by completedAt date), each
-      // paired with the XP their priority granted - shown as a quick
-      // "recent activity" list in the Recent Rewards section.
       const recent = [...completed]
         .filter((a) => a.completedAt)
         .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))
@@ -125,16 +124,17 @@ export default function RewardsScreen() {
   const { currentLevelXp, xpForNextLevel, percent } = levelProgress(stats.xp);
   const heroScale = 1 + Math.min(level - 1, 4) * 0.1;
   const heroName = HERO_OPTIONS.find((h) => h.id === stats.heroId)?.name ?? "";
-  const nextBadge = BADGES.find((b) => !stats.badges.includes(b.id));
   const streakWeek = getStreakWeek(stats.streak, stats.lastCompletedDate);
 
-  // The most recently earned badge, used in the Recent Rewards summary.
-  // BADGES is ordered roughly by increasing difficulty, so the last
-  // earned one in that order is a reasonable "most recent" approximation
-  // (we don't store a timestamp per badge, only which ones are earned).
-  const mostRecentBadge = [...stats.badges].reverse()
-    .map((id) => BADGES.find((b) => b.id === id))
-    .find(Boolean);
+  // "Next Reward" is now driven by LEVEL, not badges - it always has
+  // something meaningful to show, and lines up naturally with milestones
+  // like the pet unlock at Level 5.
+  const nextLevelReward = getNextLevelReward(level);
+
+  // The most recently earned badge - shown enlarged with its star
+  // requirement, MLBB-style, above the rest of the badge row.
+  const mostRecentBadge = [...BADGES].reverse().find((b) => stats.badges.includes(b.id));
+  const otherBadges = BADGES.filter((b) => b.id !== mostRecentBadge?.id);
 
   if (!loading && !stats.heroId) {
     return (
@@ -164,7 +164,7 @@ export default function RewardsScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>Rewards</Text>
 
-      {/* Header row: hero | level + XP progress | next reward */}
+      {/* Header row: hero | level + XP progress | next reward (level-based) */}
       <View style={styles.headerRow}>
         {stats.heroId && <HeroFigure heroId={stats.heroId} size={90} scale={heroScale} />}
         <View style={styles.headerMiddle}>
@@ -182,18 +182,18 @@ export default function RewardsScreen() {
             />
           </View>
         </View>
-        {nextBadge ? (
+        {nextLevelReward ? (
           <View style={[styles.nextRewardBox, { borderColor: theme.primary }]}>
             <Text style={styles.nextRewardIcon}>[?]</Text>
-            <Text style={styles.nextRewardLabel}>Next</Text>
+            <Text style={styles.nextRewardLabel}>Lvl {level + 1}</Text>
             <Text style={styles.nextRewardName} numberOfLines={2}>
-              {nextBadge.name}
+              {nextLevelReward}
             </Text>
           </View>
         ) : (
           <View style={[styles.nextRewardBox, { borderColor: "#eab308" }]}>
             <Text style={styles.nextRewardIcon}>[*]</Text>
-            <Text style={styles.nextRewardLabel}>All done!</Text>
+            <Text style={styles.nextRewardLabel}>Max level!</Text>
           </View>
         )}
       </View>
@@ -214,7 +214,7 @@ export default function RewardsScreen() {
         <View style={styles.weekDaysRow}>
           {streakWeek.map((day, index) => (
             <StreakWeekDay
-              key={index}
+              key={`${day.label}-${index}`}
               label={day.label}
               isActive={day.isActive}
               isToday={day.isToday}
@@ -224,23 +224,29 @@ export default function RewardsScreen() {
         </View>
       </View>
 
-      {stats.pets.length > 0 && (
-        <View style={styles.petsRow}>
-          {stats.pets.map((petId) => (
-            <View key={petId} style={styles.petChip}>
-              <Text style={styles.petChipText}>{PET_LABELS[petId]}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
       <Text style={styles.sectionHeader}>Badges</Text>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
+        {/* Most recently earned badge, shown larger with gold stars
+            underneath (MLBB-style), separate from the rest of the row. */}
+        {mostRecentBadge && (
+          <View style={[styles.featuredBadgeCard, { borderColor: theme.primary }]}>
+            <Text style={styles.featuredBadgeIcon}>[*]</Text>
+            <Text style={styles.featuredBadgeName}>{mostRecentBadge.name}</Text>
+            <Text style={styles.featuredBadgeDescription}>{mostRecentBadge.description}</Text>
+            <View style={styles.featuredBadgeStarsRow}>
+              {Array.from({ length: mostRecentBadge.starsRequired }, (_, i) => (
+                <Image key={`${mostRecentBadge.id}-star-${i}`} source={require("../../assets/icons/star.jpg")} style={styles.featuredBadgeStarImage} />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* The rest of the badges, standard size, earned or locked. */}
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={BADGES}
+          data={otherBadges}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ gap: 10, paddingRight: 16 }}
           renderItem={({ item }) => {
@@ -257,10 +263,6 @@ export default function RewardsScreen() {
           }}
         />
 
-        {/* Recent Rewards - a quick summary of standout progress, built
-            from data we already track (no separate event history needed):
-            tasks completed, current streak, current level, and the most
-            recently earned badge. */}
         <Text style={[styles.sectionHeader, { marginTop: 20 }]}>Recent Rewards</Text>
         <View style={styles.recentRewardsBlock}>
           <View style={styles.recentRewardRow}>
@@ -281,17 +283,8 @@ export default function RewardsScreen() {
             <Text style={styles.recentRewardIcon}>[Up]</Text>
             <Text style={styles.recentRewardText}>Reached Level {level}</Text>
           </View>
-          {mostRecentBadge && (
-            <View style={styles.recentRewardRow}>
-              <Text style={styles.recentRewardIcon}>[*]</Text>
-              <Text style={styles.recentRewardText}>
-                Badge earned: {mostRecentBadge.name}
-              </Text>
-            </View>
-          )}
         </View>
 
-        {/* Per-task XP breakdown for the most recently completed assessments */}
         {recentCompletions.length > 0 && (
           <View style={[styles.recentRewardsBlock, { marginTop: 10 }]}>
             {recentCompletions.map((item) => (
@@ -381,17 +374,21 @@ const styles = StyleSheet.create({
   streakNumberFloat: { fontSize: 20, fontWeight: "bold", color: "#c2410c", lineHeight: 22 },
   streakRowText: { fontSize: 12, fontWeight: "600", color: "#1e293b", lineHeight: 14 },
   weekDaysRow: { flexDirection: "row", gap: 6 },
-  petsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  petChip: {
-    backgroundColor: "#dcfce7",
-    borderColor: "#16a34a",
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  petChipText: { color: "#166534", fontWeight: "600", fontSize: 12 },
   sectionHeader: { fontSize: 16, fontWeight: "700", color: "#1e293b", marginBottom: 8 },
+  // Enlarged "featured" card for the user's most recently earned badge.
+  featuredBadgeCard: {
+    borderWidth: 2,
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 14,
+    alignItems: "center",
+    backgroundColor: "#fffbeb",
+  },
+  featuredBadgeIcon: { fontSize: 22, fontWeight: "700", color: "#1e293b", marginBottom: 6 },
+  featuredBadgeName: { fontSize: 18, fontWeight: "800", color: "#1e293b" },
+  featuredBadgeDescription: { fontSize: 12, color: "#64748b", marginTop: 4, textAlign: "center" },
+  featuredBadgeStarsRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 10, justifyContent: "center" },
+  featuredBadgeStarImage: { width: 18, height: 18 },
   badgeCard: {
     width: 140,
     borderRadius: 10,
@@ -415,7 +412,6 @@ const styles = StyleSheet.create({
   recentRewardRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   recentRewardIcon: { fontSize: 11, fontWeight: "700", color: "#475569", width: 44 },
   recentRewardText: { fontSize: 13, color: "#1e293b", flex: 1 },
-  xpGainText: { fontSize: 12, fontWeight: "700" },
   xpRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -424,6 +420,7 @@ const styles = StyleSheet.create({
   },
   xpRowCategory: { fontSize: 10, color: "#94a3b8", textTransform: "uppercase" },
   xpRowLabel: { fontSize: 13, color: "#1e293b", marginTop: 1 },
+  xpGainText: { fontSize: 12, fontWeight: "700" },
   userInfoSection: {
     marginTop: 20,
     paddingTop: 16,
@@ -443,7 +440,6 @@ const styles = StyleSheet.create({
   },
   logoutButtonText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });
-
 
 
 

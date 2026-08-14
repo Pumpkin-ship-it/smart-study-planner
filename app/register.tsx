@@ -1,10 +1,19 @@
 ﻿import { auth, db } from "@/services/firebase";
 import { useTheme } from "@/components/ThemeContext";
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -14,12 +23,17 @@ export default function RegisterScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false); // disables the button while registering
 
   async function handleRegister() {
     // Basic validation before we even talk to Firebase.
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert("Missing info", "Please fill in all fields.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert("Passwords don't match", "Please make sure both password fields match.");
       return;
     }
 
@@ -28,6 +42,10 @@ export default function RegisterScreen() {
       // 1. Create the account in Firebase Authentication.
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+
+      // Send a verification email - the user must click the link in it
+      // before they can access the app (enforced by our root index.tsx).
+      await sendEmailVerification(user);
 
       // 2. Save the user's profile info in Firestore, matching our UserProfile interface.
       await setDoc(doc(db, "users", user.uid), {
@@ -39,7 +57,7 @@ export default function RegisterScreen() {
 
       // 3. Registration successful - send them to the onboarding screen first,
       // which then leads into hero selection, instead of straight to the dashboard.
-      router.replace("/onboarding");
+      router.replace("/verify-email");
     } catch (error: any) {
       // Firebase gives descriptive error messages we can show directly.
       Alert.alert("Registration failed", error.message);
@@ -49,6 +67,8 @@ export default function RegisterScreen() {
   }
 
   return (
+    // Tapping anywhere outside a text input dismisses the keyboard.
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
 
@@ -77,6 +97,14 @@ export default function RegisterScreen() {
         onChangeText={setPassword}
         secureTextEntry
       />
+      <TextInput
+        style={styles.input}
+        placeholder="Confirm Password"
+        placeholderTextColor="#999999"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        secureTextEntry
+      />
 
       {/* Button color now follows the user's chosen app theme. */}
       <Pressable
@@ -91,6 +119,7 @@ export default function RegisterScreen() {
         <Text style={[styles.link, { color: theme.primary }]}>Already have an account? Log in</Text>
       </Pressable>
     </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -134,3 +163,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 });
+
+
+

@@ -33,6 +33,96 @@ export function getRankTitle(level: number): string {
   return RANK_TITLES[Math.max(index, 0)];
 }
 
+// --- Rank system (Mobile Legends-style tiers and stars) ---
+// Separate from the Level/XP system above - XP never decreases, but rank
+// CAN go down if the user misses deadlines or fails focus sessions.
+// Each "gain" or "loss" event only adds partial progress (2 events =
+// 1 star change), tracked via the *Progress counters on GamificationStats.
+
+// Applies one unit of "gain" progress (e.g. one on-time assessment, or one
+// successful focus session). Every 2 gain events grants a full star.
+// Reaching 5 stars promotes to the next tier and resets stars to 0.
+export function applyStarGain(
+  progress: number,
+  rankTier: number,
+  rankStars: number,
+  totalStarsEarned: number
+): { progress: number; rankTier: number; rankStars: number; totalStarsEarned: number } {
+  const newProgress = progress + 1;
+  if (newProgress < 2) {
+    return { progress: newProgress, rankTier, rankStars, totalStarsEarned };
+  }
+
+  let newStars = rankStars + 1;
+  let newTier = rankTier;
+  if (newStars >= 5) {
+    newStars = 0;
+    newTier = Math.min(rankTier + 1, RANK_TITLES.length - 1); // capped at the top tier
+  }
+  // totalStarsEarned counts every star ever gained, and never decreases -
+  // this is what badges are earned against, so demotions never take a
+  // badge away.
+  return { progress: 0, rankTier: newTier, rankStars: newStars, totalStarsEarned: totalStarsEarned + 1 };
+}
+
+// Applies one unit of "loss" progress (e.g. one overdue assessment, or one
+// failed focus session). Every 2 loss events removes a star. Dropping
+// below 0 stars demotes to the previous tier with a "soft landing" of 4
+// stars (matching MLBB-style rank demotion), except at the very first
+// tier, which has a floor and cannot demote further.
+export function applyStarLoss(
+  progress: number,
+  rankTier: number,
+  rankStars: number
+): { progress: number; rankTier: number; rankStars: number } {
+  const newProgress = progress + 1;
+  if (newProgress < 2) {
+    return { progress: newProgress, rankTier, rankStars };
+  }
+
+  let newStars = rankStars - 1;
+  let newTier = rankTier;
+  if (newStars < 0) {
+    if (rankTier === 0) {
+      newStars = 0; // floor protection - cannot demote below the first tier
+    } else {
+      newTier = rankTier - 1;
+      newStars = 4; // soft landing into the lower tier
+    }
+  }
+  return { progress: 0, rankTier: newTier, rankStars: newStars };
+}
+
+// Returns the rank name for a given tier index (0 = Novice ... 9 = General).
+export function getRankName(tier: number): string {
+  const index = Math.min(Math.max(tier, 0), RANK_TITLES.length - 1);
+  return RANK_TITLES[index];
+}
+
+// What unlocks at each level, shown in the Rewards "Next Reward" box.
+// Index 0 = reward for reaching Level 2 (Level 1 is the starting point,
+// so nothing "unlocks" there).
+const LEVEL_REWARDS = [
+  "New Badge",
+  "New Badge",
+  "New Badge",
+  "Pet Unlocked: Phoenix",
+  "New Badge",
+  "New Badge",
+  "New Badge",
+  "New Badge",
+  "Rank Title: General",
+];
+
+// Returns a description of what unlocks at the NEXT level, for display
+// in the "Next Reward" box. Returns null once the user has reached the
+// highest level we have a reward defined for.
+export function getNextLevelReward(currentLevel: number): string | null {
+  const index = currentLevel - 1;
+  if (index < 0 || index >= LEVEL_REWARDS.length) return null;
+  return LEVEL_REWARDS[index];
+}
+
 export function calculateLevel(xp: number): number {
   let level = 1;
   for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
@@ -61,64 +151,85 @@ export interface BadgeDefinition {
   id: string;
   name: string;
   description: string;
+  starsRequired: number; // used to render a row of gold star icons on the badge
   condition: (stats: GamificationStats, totalCompleted: number) => boolean;
 }
 
+// Every badge is earned purely by accumulating total stars - a single,
+// unified "currency" instead of juggling separate streak/level/count
+// thresholds that could clash or cluster together.
 export const BADGES: BadgeDefinition[] = [
   {
-    id: "first_step",
+    id: "stars_1",
     name: "First Step",
-    description: "Complete your first assessment.",
-    condition: (_stats, totalCompleted) => totalCompleted >= 1,
+    description: "Earn your first star.",
+    starsRequired: 1,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 1,
   },
   {
-    id: "five_done",
-    name: "Getting Things Done",
-    description: "Complete 5 assessments.",
-    condition: (_stats, totalCompleted) => totalCompleted >= 5,
+    id: "stars_3",
+    name: "Getting Started",
+    description: "Earn 3 stars.",
+    starsRequired: 3,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 3,
   },
   {
-    id: "ten_done",
+    id: "stars_5",
+    name: "Consistent",
+    description: "Earn 5 stars.",
+    starsRequired: 5,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 5,
+  },
+  {
+    id: "stars_8",
     name: "Study Machine",
-    description: "Complete 10 assessments.",
-    condition: (_stats, totalCompleted) => totalCompleted >= 10,
+    description: "Earn 8 stars.",
+    starsRequired: 8,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 8,
   },
   {
-    id: "streak_3",
-    name: "On a Roll",
-    description: "Reach a 3-day completion streak.",
-    condition: (stats) => stats.streak >= 3,
-  },
-  {
-    id: "streak_7",
+    id: "stars_12",
     name: "Week Warrior",
-    description: "Reach a 7-day completion streak.",
-    condition: (stats) => stats.streak >= 7,
+    description: "Earn 12 stars.",
+    starsRequired: 12,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 12,
   },
   {
-    id: "level_3",
+    id: "stars_16",
     name: "Rising Star",
-    description: "Reach Level 3.",
-    condition: (stats) => calculateLevel(stats.xp) >= 3,
+    description: "Earn 16 stars.",
+    starsRequired: 16,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 16,
   },
   {
-    id: "level_5",
+    id: "stars_20",
+    name: "Dedicated",
+    description: "Earn 20 stars.",
+    starsRequired: 20,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 20,
+  },
+  {
+    id: "stars_25",
+    name: "Unstoppable",
+    description: "Earn 25 stars.",
+    starsRequired: 25,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 25,
+  },
+  {
+    id: "stars_30",
     name: "Top Performer",
-    description: "Reach Level 5.",
-    condition: (stats) => calculateLevel(stats.xp) >= 5,
+    description: "Earn 30 stars.",
+    starsRequired: 30,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 30,
+  },
+  {
+    id: "stars_40",
+    name: "Legend",
+    description: "Earn 40 stars.",
+    starsRequired: 40,
+    condition: (stats) => (stats.totalStarsEarned ?? 0) >= 40,
   },
 ];
-
-// Maps specific badges to the pet companion they unlock. Centralized here
-// so both the badge-checking logic and the Rewards display use the same
-// source of truth for which badge grants which pet.
-export const PET_UNLOCK_BADGES: Record<string, PetId> = {
-  streak_3: "cat",
-  five_done: "fox",
-  streak_7: "wolf",
-  level_3: "dragon",
-  level_5: "phoenix",
-};
 
 export function checkNewBadges(stats: GamificationStats, totalCompleted: number): string[] {
   return BADGES.filter(
@@ -126,17 +237,18 @@ export function checkNewBadges(stats: GamificationStats, totalCompleted: number)
   ).map((badge) => badge.id);
 }
 
-// Given a list of newly earned badge IDs, returns any pets that should be
-// unlocked as a result (skipping any the user already has).
-export function petsUnlockedByBadges(newBadgeIds: string[], existingPets: PetId[]): PetId[] {
-  const newPets: PetId[] = [];
-  for (const badgeId of newBadgeIds) {
-    const pet = PET_UNLOCK_BADGES[badgeId];
-    if (pet && !existingPets.includes(pet) && !newPets.includes(pet)) {
-      newPets.push(pet);
-    }
+// The pet companion is unlocked purely by reaching Level 5 - checked
+// directly against XP here, independent of the badge system. Returns
+// the pet to grant, or null if the user hasn't reached Level 5 yet or
+// already has the pet.
+const LEVEL_5_PET: PetId = "phoenix";
+
+export function petUnlockedByLevel(xp: number, existingPets: PetId[]): PetId | null {
+  const level = calculateLevel(xp);
+  if (level >= 5 && !existingPets.includes(LEVEL_5_PET)) {
+    return LEVEL_5_PET;
   }
-  return newPets;
+  return null;
 }
 
 export function updateStreak(lastCompletedDate: string | null, currentStreak: number): { streak: number; today: string } {
@@ -156,4 +268,5 @@ export function updateStreak(lastCompletedDate: string | null, currentStreak: nu
 
   return { streak: 1, today };
 }
+
 

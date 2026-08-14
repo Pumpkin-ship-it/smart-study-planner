@@ -3,7 +3,7 @@ import { useTheme } from "@/components/ThemeContext";
 import { ProgressRing } from "@/components/ProgressRing";
 import { showAlert } from "@/utils/alert";
 import { GamificationStats } from "@/types";
-import { checkNewBadges, petsUnlockedByBadges, updateStreak } from "@/utils/gamification";
+import { checkNewBadges, petUnlockedByLevel, updateStreak, applyStarGain, applyStarLoss } from "@/utils/gamification";
 import { useRouter } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
 import LottieView from "lottie-react-native";
@@ -107,12 +107,52 @@ export default function FocusTimerScreen() {
     }, 1000);
   }
 
-  function failSession() {
+  async function failSession() {
     if (failedRef.current) return;
     failedRef.current = true;
     if (intervalRef.current) clearInterval(intervalRef.current);
     setSessionSucceeded(false);
     setPhase("finished");
+
+    // A failed session (left the app early) counts toward rank star
+    // loss progress - every 2 failed sessions costs a full star.
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const statsRef = doc(db, "gamification", currentUser.uid);
+    const statsSnap = await getDoc(statsRef);
+    const emptyStats: GamificationStats = {
+      userId: currentUser.uid,
+      xp: 0,
+      streak: 0,
+      lastCompletedDate: null,
+      badges: [],
+      heroId: null,
+      pets: [],
+      rankTier: 0,
+      rankStars: 0,
+      assessmentGainProgress: 0,
+      assessmentLossProgress: 0,
+      focusGainProgress: 0,
+      focusLossProgress: 0,
+      totalStarsEarned: 0,
+    };
+    const existing: GamificationStats = statsSnap.exists()
+      ? { ...emptyStats, ...(statsSnap.data() as Partial<GamificationStats>) }
+      : emptyStats;
+
+    const lossResult = applyStarLoss(
+      existing.focusLossProgress,
+      existing.rankTier,
+      existing.rankStars
+    );
+
+    await setDoc(statsRef, {
+      ...existing,
+      focusLossProgress: lossResult.progress,
+      rankTier: lossResult.rankTier,
+      rankStars: lossResult.rankStars,
+    });
   }
 
   async function completeSession() {
@@ -132,6 +172,13 @@ export default function FocusTimerScreen() {
       badges: [],
       heroId: null,
       pets: [],
+      rankTier: 0,
+      rankStars: 0,
+      assessmentGainProgress: 0,
+      assessmentLossProgress: 0,
+      focusGainProgress: 0,
+      focusLossProgress: 0,
+      totalStarsEarned: 0,
     };
     // Merge with defaults so any fields missing from an older Firestore
     // document (e.g. accounts created before pets/heroId existed) get
@@ -151,13 +198,26 @@ export default function FocusTimerScreen() {
       lastCompletedDate: today,
     };
 
+    // A successfully completed focus session counts toward rank star
+    // gain progress - every 2 successful sessions grants a full star.
+    const gainResult = applyStarGain(
+      existing.focusGainProgress,
+      existing.rankTier,
+      existing.rankStars,
+      existing.totalStarsEarned ?? 0
+    );
+    updatedStats.focusGainProgress = gainResult.progress;
+    updatedStats.rankTier = gainResult.rankTier;
+    updatedStats.rankStars = gainResult.rankStars;
+    updatedStats.totalStarsEarned = gainResult.totalStarsEarned;
+
     const newlyEarnedBadges = checkNewBadges(updatedStats, 0);
     if (newlyEarnedBadges.length > 0) {
       updatedStats.badges = [...existing.badges, ...newlyEarnedBadges];
     }
-    const newlyEarnedPets = petsUnlockedByBadges(newlyEarnedBadges, existing.pets);
-    if (newlyEarnedPets.length > 0) {
-      updatedStats.pets = [...existing.pets, ...newlyEarnedPets];
+    const newPet = petUnlockedByLevel(updatedStats.xp, existing.pets);
+    if (newPet) {
+      updatedStats.pets = [...existing.pets, newPet];
     }
 
     await setDoc(statsRef, updatedStats);
@@ -439,6 +499,10 @@ const styles = StyleSheet.create({
   resultSubtext: { fontSize: 13, color: "#555555", marginTop: 8, textAlign: "center" },
   backLink: { textAlign: "center", marginTop: 16 },
 });
+
+
+
+
 
 
 

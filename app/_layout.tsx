@@ -34,9 +34,10 @@ export default function RootLayout() {
           {/* One-time welcome screen shown right after registration */}
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           {/* Profile / account settings screen, reached via an icon on the Dashboard */}
-          <Stack.Screen name="profile" options={{ headerShown: false }} />
-          {/* Focus Timer - reached via a card on the Dashboard */}
+                    {/* Focus Timer - reached via a card on the Dashboard */}
           <Stack.Screen name="focus-timer" options={{ headerShown: false }} />
+          <Stack.Screen name="verify-email" options={{ headerShown: false }} />
+          <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
         </Stack>
         {/* "auto" makes the status bar icons light or dark depending on device theme */}
         <StatusBar style="auto" />
@@ -44,3 +45,4 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
