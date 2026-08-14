@@ -124,17 +124,21 @@ export default function FocusTimerScreen() {
 
     const statsRef = doc(db, "gamification", currentUser.uid);
     const statsSnap = await getDoc(statsRef);
+    const emptyStats: GamificationStats = {
+      userId: currentUser.uid,
+      xp: 0,
+      streak: 0,
+      lastCompletedDate: null,
+      badges: [],
+      heroId: null,
+      pets: [],
+    };
+    // Merge with defaults so any fields missing from an older Firestore
+    // document (e.g. accounts created before pets/heroId existed) get
+    // safe fallback values instead of causing a crash.
     const existing: GamificationStats = statsSnap.exists()
-      ? (statsSnap.data() as GamificationStats)
-      : {
-          userId: currentUser.uid,
-          xp: 0,
-          streak: 0,
-          lastCompletedDate: null,
-          badges: [],
-          heroId: null,
-          pets: [],
-        };
+      ? { ...emptyStats, ...(statsSnap.data() as Partial<GamificationStats>) }
+      : emptyStats;
 
     const { streak, today } = updateStreak(existing.lastCompletedDate, existing.streak);
     const newXp = existing.xp + FOCUS_SESSION_XP;
@@ -227,7 +231,13 @@ export default function FocusTimerScreen() {
                 <View style={styles.pickerRow}>
                   <View style={styles.pickerColumnOuter}>
                     <View style={styles.pickerClip}>
-                      <Picker selectedValue={hours} onValueChange={setHours} style={styles.picker}>
+                      <Picker
+                        selectedValue={hours}
+                        onValueChange={setHours}
+                        style={styles.picker}
+                        itemStyle={{ color: "#1e293b", fontSize: 20 }}
+                        mode="dropdown"
+                      >
                         {Array.from({ length: 6 }, (_, i) => i).map((h) => (
                           <Picker.Item key={h} label={`${h}`} value={h} />
                         ))}
@@ -237,7 +247,13 @@ export default function FocusTimerScreen() {
                   </View>
                   <View style={styles.pickerColumnOuter}>
                     <View style={styles.pickerClip}>
-                      <Picker selectedValue={minutes} onValueChange={setMinutes} style={styles.picker}>
+                      <Picker
+                        selectedValue={minutes}
+                        onValueChange={setMinutes}
+                        style={styles.picker}
+                        itemStyle={{ color: "#1e293b", fontSize: 20 }}
+                        mode="dropdown"
+                      >
                         {Array.from({ length: 60 }, (_, i) => i).map((m) => (
                           <Picker.Item key={m} label={`${m}`} value={m} />
                         ))}
@@ -247,7 +263,13 @@ export default function FocusTimerScreen() {
                   </View>
                   <View style={styles.pickerColumnOuter}>
                     <View style={styles.pickerClip}>
-                      <Picker selectedValue={seconds} onValueChange={setSeconds} style={styles.picker}>
+                      <Picker
+                        selectedValue={seconds}
+                        onValueChange={setSeconds}
+                        style={styles.picker}
+                        itemStyle={{ color: "#1e293b", fontSize: 20 }}
+                        mode="dropdown"
+                      >
                         {Array.from({ length: 60 }, (_, i) => i).map((s) => (
                           <Picker.Item key={s} label={`${s}`} value={s} />
                         ))}
@@ -377,7 +399,7 @@ const styles = StyleSheet.create({
   chipTextSelected: { color: "#fff", fontWeight: "600" },
   pickerRow: { flexDirection: "row", justifyContent: "space-between" },
   pickerColumnOuter: { flex: 1, alignItems: "center" },
-  pickerClip: { width: "100%", height: 150, overflow: "hidden" },
+  pickerClip: { width: "100%", height: 130, overflow: "hidden" },
   picker: { width: "100%", height: 150 },
   pickerLabel: { fontSize: 14, color: "#333333", fontWeight: "600", marginTop: 4 },
   reminderCard: { borderRadius: 12, padding: 16, marginBottom: 16 },
@@ -417,3 +439,7 @@ const styles = StyleSheet.create({
   resultSubtext: { fontSize: 13, color: "#555555", marginTop: 8, textAlign: "center" },
   backLink: { textAlign: "center", marginTop: 16 },
 });
+
+
+
+
