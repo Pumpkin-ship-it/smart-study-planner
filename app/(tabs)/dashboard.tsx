@@ -1,11 +1,11 @@
 ﻿import { HeroFigure } from "@/components/HeroFigure";
-import { ProgressRing } from "@/components/ProgressRing";
+import { MultiSegmentRing, RingSegment } from "@/components/MultiSegmentRing";
 import { useTheme } from "@/components/ThemeContext";
 import { auth, db } from "@/services/firebase";
 import { Assessment, GamificationStats, HeroId, Subject } from "@/types";
 import { dueDateLabel, getUrgencyLevel } from "@/utils/dueDate";
 import { buildSubjectColorMap } from "@/utils/subjectColors";
-import { calculateLevel, levelProgress } from "@/utils/gamification";
+import { calculateLevel, getRankTitle, levelProgress, xpForAssessment } from "@/utils/gamification";
 import { useFocusEffect, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { useCallback, useState } from "react";
@@ -14,7 +14,9 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 // the phone's notch, camera cutout, or status bar.
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Builds 2-letter initials from a full name, e.g. "Kezang Choden" -> "KC".
+// How many tasks to recommend for today's goal.
+const DAILY_TASK_GOAL = 3;
+
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -22,8 +24,6 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-// Small colored square icon shown next to each upcoming assessment,
-// colored to match its subject (same color used in Subjects/Progress).
 function AssessmentIcon({ color }: { color: string }) {
   return (
     <View style={[styles.assessmentIconBox, { backgroundColor: color }]}>
@@ -42,8 +42,6 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState<GamificationStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Loads everything the Dashboard needs: the user's name, their subjects,
-  // their assessments, and their gamification stats (for the hero/level card).
   async function loadData() {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -81,8 +79,6 @@ export default function DashboardScreen() {
     }
   }
 
-  // Reload every time the Dashboard tab comes into focus, so it always
-  // reflects the latest data (e.g. after adding an assessment elsewhere).
   useFocusEffect(
     useCallback(() => {
       loadData();
@@ -91,27 +87,47 @@ export default function DashboardScreen() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  const subjectColorMap = buildSubjectColorMap(subjects);
   const totalCount = assessments.length;
   const completedCount = assessments.filter((a) => a.completed).length;
   const overdueCount = assessments.filter((a) => !a.completed && a.dueDate < todayStr).length;
 
-  // "Daily Progress" ring reflects assessments due TODAY specifically,
-  // to match the "let's make today productive" framing.
-  const dueToday = assessments.filter((a) => a.dueDate === todayStr);
-  const dueTodayCompleted = dueToday.filter((a) => a.completed).length;
-  const dailyPercent =
-    dueToday.length === 0 ? 0 : Math.round((dueTodayCompleted / dueToday.length) * 100);
+  // Recommended tasks for today: pending assessments, overdue first (most
+  // urgent), then soonest-due, capped at DAILY_TASK_GOAL. This gives a
+  // realistic, achievable daily target rather than showing every pending
+  // task at once.
+  const pending = assessments.filter((a) => !a.completed);
+  const overduePending = pending.filter((a) => a.dueDate < todayStr);
+  const upcomingPending = pending.filter((a) => a.dueDate >= todayStr);
+  const recommendedToday = [...overduePending, ...upcomingPending].slice(0, DAILY_TASK_GOAL);
 
-  // Upcoming list - soonest, not-completed assessments, capped to 4 rows
-  // so the Dashboard stays scannable at a glance.
-  const upcoming = assessments.filter((a) => !a.completed).slice(0, 4);
+  // How many of TODAY's completions count toward the daily goal, and how
+  // much XP was earned today - both based on the completedAt field set
+  // when an assessment is marked complete.
+  const completedTodayList = assessments.filter((a) => a.completedAt === todayStr);
+  const tasksCompletedToday = completedTodayList.length;
+  const xpEarnedToday = completedTodayList.reduce(
+    (sum, a) => sum + xpForAssessment(a.priority),
+    0
+  );
+
+  // Daily XP goal: the XP that completing all of today's recommended
+  // tasks would grant - a natural target tied to real remaining work.
+  const dailyXpGoal = recommendedToday.reduce((sum, a) => sum + xpForAssessment(a.priority), 0);
+
+  const taskGoalCount = Math.max(recommendedToday.length, 1); // avoid divide-by-zero
+  const dailyTaskPercent = Math.min(
+    100,
+    Math.round((Math.min(tasksCompletedToday, taskGoalCount) / taskGoalCount) * 100)
+  );
+
+  const upcoming = pending.slice(0, 4);
 
   function subjectName(id: string) {
     return subjects.find((s) => s.id === id)?.name ?? "";
   }
 
-  // Overall subject completion breakdown, same calculation as the Progress tab.
+  const subjectColorMap = buildSubjectColorMap(subjects);
+
   const subjectBreakdown = subjects.map((subject) => {
     const subjectAssessments = assessments.filter((a) => a.subjectId === subject.id);
     const completed = subjectAssessments.filter((a) => a.completed).length;
@@ -122,56 +138,60 @@ export default function DashboardScreen() {
       completed,
     };
   });
+
   const overallSubjectPercent =
     totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+  const ringSegments: RingSegment[] = subjectBreakdown
+    .filter((s) => s.completed > 0)
+    .map((s) => ({
+      percent: totalCount === 0 ? 0 : (s.completed / totalCount) * 100,
+      color: subjectColorMap[s.id],
+    }));
 
-  // Hero + level info for the "Level Up Your Journey" section.
   const xp = stats?.xp ?? 0;
   const level = calculateLevel(xp);
   const { percent: levelPercent, currentLevelXp, xpForNextLevel } = levelProgress(xp);
   const heroId: HeroId = stats?.heroId ?? "knight";
-  // Hero grows slightly larger visually as the level increases, capping
-  // out around level 5 so it doesn't scale indefinitely.
   const heroScale = 1 + Math.min(level - 1, 4) * 0.1;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Header: title + tappable avatar (with a small level badge) leading to Profile */}
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>Dashboard</Text>
-        <Pressable onPress={() => router.push("/profile")}>
-          <View style={[styles.avatarSmall, { backgroundColor: theme.primary }]}>
-            <Text style={styles.avatarSmallText}>{getInitials(userName)}</Text>
-          </View>
-          <View style={[styles.levelPill, { backgroundColor: theme.primary }]}>
-            <Text style={styles.levelPillText}>Lv.{level}</Text>
-          </View>
-        </Pressable>
+        <View style={[styles.avatarLarge, { backgroundColor: theme.primaryLight }]}>
+          <HeroFigure heroId={heroId} size={56} crop="bust" />
+        </View>
       </View>
-      <Text style={styles.greeting}>Hello, {userName}</Text>
+      <Text style={styles.greeting}>Hello, {getRankTitle(level)} {userName.split(" ")[0]}</Text>
       <Text style={styles.subGreeting}>Let's make today productive!</Text>
 
-      {/* Daily progress card - accent color follows the user's chosen theme */}
+      {/* Daily progress card - shows a recommended task goal for today
+          plus the XP that completing it would earn, and how much of
+          both have actually been achieved today so far. */}
       <View style={[styles.dailyCard, { backgroundColor: theme.primary }]}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.dailyCardTitle}>Daily Progress</Text>
+          <Text style={styles.dailyCardTitle}>Today's Goal</Text>
           <Text style={styles.dailyCardSubtext}>
-            {dueTodayCompleted} / {dueToday.length} tasks completed
+            {Math.min(tasksCompletedToday, taskGoalCount)} / {recommendedToday.length} recommended
+            tasks
+          </Text>
+          <Text style={styles.dailyCardSubtext}>
+            {xpEarnedToday} / {dailyXpGoal} XP today
           </Text>
           {stats && stats.streak > 0 && (
             <Text style={styles.streakText}>{stats.streak} day streak</Text>
           )}
         </View>
-        <ProgressRing
-          percent={dailyPercent}
+        <MultiSegmentRing
+          segments={[{ percent: dailyTaskPercent, color: "#9ca3af" }]}
+          totalPercent={dailyTaskPercent}
           size={90}
-          color="#ffffff"
-          trackColor="rgba(255,255,255,0.3)"
-          textColor="#ffffff"
+          strokeWidth={14}
+          trackColor="#111111"
+          textColor="#111111"
         />
       </View>
 
-      {/* Quick stats row */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{totalCount}</Text>
@@ -187,7 +207,6 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* Everything below scrolls together in a single-item FlatList. */}
       <FlatList
         style={{ flex: 1 }}
         data={[{ key: "content" }]}
@@ -196,8 +215,6 @@ export default function DashboardScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
         renderItem={() => (
           <>
-            {/* Upcoming assessments - colored subject icon, title, subject
-                name, colored urgency label, and a priority pill. */}
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionHeader}>Upcoming Assessments</Text>
               <Pressable onPress={() => router.push("/(tabs)/assessments")}>
@@ -241,11 +258,14 @@ export default function DashboardScreen() {
               })
             )}
 
-            {/* Subject progress donut, reusing the same ring component and
-                the same per-subject colors used on the Subjects/Progress tabs. */}
             <Text style={[styles.sectionHeader, { marginTop: 20 }]}>Subject Progress</Text>
             <View style={styles.subjectRow}>
-              <ProgressRing percent={overallSubjectPercent} size={100} color={theme.primary} />
+              <MultiSegmentRing
+                segments={ringSegments}
+                totalPercent={overallSubjectPercent}
+                size={100}
+                strokeWidth={18}
+              />
               <View style={{ flex: 1, gap: 6 }}>
                 {subjectBreakdown.map((s) => {
                   const pct = s.total === 0 ? 0 : Math.round((s.completed / s.total) * 100);
@@ -262,8 +282,6 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            {/* Level Up Your Journey - shows the user's hero, current level,
-                XP progress, and a hint at the next milestone. */}
             <Text style={[styles.sectionHeader, { marginTop: 20 }]}>Level Up Your Journey</Text>
             <View style={styles.journeyCard}>
               <HeroFigure heroId={heroId} size={100} scale={heroScale} />
@@ -284,8 +302,6 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            {/* Focus Timer entry point - takes the user into a dedicated
-                timer screen to start a focused study session. */}
             <Pressable
               style={[styles.focusCard, { backgroundColor: theme.primaryLight }]}
               onPress={() => router.push("/focus-timer")}
@@ -308,28 +324,19 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ffffff", padding: 16 },
+  container: { flex: 1, backgroundColor: "#fafafa", padding: 16 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  headerTitle: { fontSize: 20, fontWeight: "bold", color: "#111111" },
-  avatarSmall: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerTitle: { fontSize: 20, fontWeight: "bold", color: "#1e293b" },
+  avatarLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
-  avatarSmallText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  levelPill: {
-    position: "absolute",
-    bottom: -6,
-    right: -6,
-    borderRadius: 8,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
-  levelPillText: { color: "#fff", fontSize: 9, fontWeight: "700" },
-  greeting: { fontSize: 22, fontWeight: "bold", color: "#111111", marginTop: 12 },
-  subGreeting: { fontSize: 13, color: "#666666", marginTop: 2, marginBottom: 16 },
+  greeting: { fontSize: 22, fontWeight: "bold", color: "#1e293b", marginTop: 12 },
+  subGreeting: { fontSize: 13, color: "#64748b", marginTop: 2, marginBottom: 16 },
   dailyCard: {
     borderRadius: 16,
     padding: 18,
@@ -337,38 +344,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  dailyCardTitle: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
-  dailyCardSubtext: { color: "rgba(255,255,255,0.9)", fontSize: 13, marginTop: 4 },
-  streakText: { color: "#ffffff", fontSize: 12, marginTop: 8, fontWeight: "600" },
+  dailyCardTitle: { color: "#111111", fontSize: 16, fontWeight: "700" },
+  dailyCardSubtext: { color: "#111111", fontSize: 13, marginTop: 4 },
+  streakText: { color: "#111111", fontSize: 12, marginTop: 8, fontWeight: "600" },
   statsRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
   statCard: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: "center",
   },
-  statCardWarning: { backgroundColor: "#fca5a5" },
-  statNumber: { fontSize: 20, fontWeight: "bold", color: "#111111" },
-  statLabel: { fontSize: 11, color: "#555555", marginTop: 2 },
+  statCardWarning: { backgroundColor: "#fca5a5", borderColor: "#fca5a5" },
+  statNumber: { fontSize: 20, fontWeight: "bold", color: "#1e293b" },
+  statLabel: { fontSize: 11, color: "#64748b", marginTop: 2 },
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-  sectionHeader: { fontSize: 15, fontWeight: "700", color: "#111111" },
+  sectionHeader: { fontSize: 15, fontWeight: "700", color: "#1e293b" },
   viewAllText: { fontSize: 12, fontWeight: "600" },
-  emptyText: { fontSize: 13, color: "#999999", marginBottom: 12 },
+  emptyText: { fontSize: 13, color: "#94a3b8", marginBottom: 12 },
   upcomingCard: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "#e2e8f0",
     borderRadius: 10,
     marginBottom: 8,
-    backgroundColor: "#fafafa",
+    backgroundColor: "#ffffff",
     gap: 10,
   },
   assessmentIconBox: {
@@ -379,33 +388,35 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   assessmentIconText: { color: "#fff", fontSize: 10, fontWeight: "700" },
-  upcomingTitle: { fontSize: 14, fontWeight: "600", color: "#111111" },
-  upcomingSubtext: { fontSize: 11, color: "#666666", marginTop: 1 },
-  upcomingDueLabel: { fontSize: 11, fontWeight: "700", color: "#555555", marginTop: 2 },
+  upcomingTitle: { fontSize: 14, fontWeight: "600", color: "#1e293b" },
+  upcomingSubtext: { fontSize: 11, color: "#64748b", marginTop: 1 },
+  upcomingDueLabel: { fontSize: 11, fontWeight: "700", color: "#64748b", marginTop: 2 },
   priorityPill: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   priorityHigh: { backgroundColor: "#fecaca" },
   priorityMedium: { backgroundColor: "#fde68a" },
   priorityLow: { backgroundColor: "#bbf7d0" },
-  priorityPillText: { fontSize: 11, fontWeight: "700", color: "#111111" },
+  priorityPillText: { fontSize: 11, fontWeight: "700", color: "#1e293b" },
   subjectRow: { flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 8 },
   subjectLegendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   legendDot: { width: 9, height: 9, borderRadius: 5 },
   subjectLegendText: { fontSize: 12, color: "#333333", flex: 1 },
-  subjectLegendPercent: { fontSize: 12, color: "#666666", fontWeight: "600" },
+  subjectLegendPercent: { fontSize: 12, color: "#64748b", fontWeight: "600" },
   journeyCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     padding: 14,
     marginBottom: 16,
   },
-  journeyLevel: { fontSize: 16, fontWeight: "700", color: "#111111" },
-  journeyXp: { fontSize: 12, color: "#666666", marginTop: 2, marginBottom: 6 },
-  journeyTrack: { height: 8, borderRadius: 4, backgroundColor: "#e5e7eb", overflow: "hidden" },
+  journeyLevel: { fontSize: 16, fontWeight: "700", color: "#1e293b" },
+  journeyXp: { fontSize: 12, color: "#64748b", marginTop: 2, marginBottom: 6 },
+  journeyTrack: { height: 8, borderRadius: 4, backgroundColor: "#e2e8f0", overflow: "hidden" },
   journeyFill: { height: "100%", borderRadius: 4 },
-  journeyNextReward: { fontSize: 11, color: "#888888", marginTop: 6 },
+  journeyNextReward: { fontSize: 11, color: "#94a3b8", marginTop: 6 },
   focusCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -417,6 +428,9 @@ const styles = StyleSheet.create({
   focusCardSubtext: { fontSize: 12, color: "#555555", marginTop: 2 },
   focusCardArrow: { fontSize: 18, fontWeight: "700", marginLeft: 8 },
 });
+
+
+
 
 
 

@@ -32,6 +32,8 @@ export interface Assessment {
   createdAt: string;                       // Timestamp of when the assessment was added
   xpAwarded?: boolean;                     // True once XP has been granted for completing this -
                                             // prevents earning XP repeatedly by toggling complete on/off
+  completedAt?: string | null;             // "YYYY-MM-DD" of when this was marked complete -
+                                            // used to compute "completed today" stats on the Dashboard
 }
 
 // The original (non-copyrighted) hero archetypes the user can choose from.
@@ -54,8 +56,6 @@ export interface GamificationStats {
 }
 
 // Represents a single focus-timer session tied to one assessment.
-// Used by the Focus Timer feature: completing a session without leaving
-// the app grants bonus XP; leaving early fails the session (no reward).
 export interface FocusSession {
   id: string;             // Unique ID for this session
   userId: string;         // Links this session to the user who ran it

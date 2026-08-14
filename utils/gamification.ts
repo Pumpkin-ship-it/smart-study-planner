@@ -10,6 +10,29 @@ const XP_BY_PRIORITY: Record<Assessment["priority"], number> = {
 // XP required to reach each level. Level = index + 1.
 const LEVEL_THRESHOLDS = [0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200];
 
+// A title shown alongside the user's name (e.g. "Hello, General Kezang"),
+// reflecting their current level - gives the level-up system a more
+// rewarding, visible sense of progression.
+const RANK_TITLES = [
+  "Novice",
+  "Apprentice",
+  "Adventurer",
+  "Veteran",
+  "Champion",
+  "Elite",
+  "Hero",
+  "Master",
+  "Legend",
+  "General",
+];
+
+// Returns the rank title for a given level. Levels beyond the highest
+// defined title just keep the top rank ("General").
+export function getRankTitle(level: number): string {
+  const index = Math.min(level - 1, RANK_TITLES.length - 1);
+  return RANK_TITLES[Math.max(index, 0)];
+}
+
 export function calculateLevel(xp: number): number {
   let level = 1;
   for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
@@ -133,3 +156,4 @@ export function updateStreak(lastCompletedDate: string | null, currentStreak: nu
 
   return { streak: 1, today };
 }
+

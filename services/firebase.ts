@@ -1,6 +1,7 @@
 ﻿import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { Platform } from "react-native";
 import { getFirestore } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // These values connect our app to OUR specific Firebase project.
 // They are safe to include in client-side code (not secret keys).
@@ -16,11 +17,27 @@ const firebaseConfig = {
 // Initialize the Firebase app with our config.
 const app = initializeApp(firebaseConfig);
 
-// Note: this uses in-memory persistence, meaning the user is logged out
-// each time the app fully restarts. Firebase's React Native persistence
-// API (getReactNativePersistence) has known compatibility issues across
-// SDK versions/platforms, so we are deliberately not using it for now -
-// a good candidate for "future improvements" in the report, but not
-// worth the instability risk this close to the deadline.
-export const auth = getAuth(app);
+// Auth persistence needs to be set up differently per platform:
+// - On native (iOS/Android), we use AsyncStorage so the login session
+//   survives fully closing and reopening the app - this is what stops
+//   the user having to log in every single time.
+// - On web, getReactNativePersistence does not exist at all (it is only
+//   part of Firebase's React Native bundle), so we fall back to the
+//   browser's own local storage persistence instead.
+//
+// We use require() here (not a top-level import) for the native-only
+// functions, so the web bundle never tries to load code that doesn't
+// exist for it - this is what caused our earlier "not a function" crash
+// on web.
+let auth: ReturnType<typeof getFirestore> extends never ? never : any;
+
+if (Platform.OS === "web") {
+  const { initializeAuth, browserLocalPersistence } = require("firebase/auth");
+  auth = initializeAuth(app, { persistence: browserLocalPersistence });
+} else {
+  const { initializeAuth, getReactNativePersistence } = require("firebase/auth");
+  auth = initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });
+}
+
+export { auth };
 export const db = getFirestore(app);

@@ -188,7 +188,11 @@ export default function AssessmentsScreen() {
 
   async function handleToggleComplete(item: Assessment) {
     const newCompleted = !item.completed;
-    await updateDoc(doc(db, "assessments", item.id), { completed: newCompleted });
+    const todayStr = new Date().toISOString().slice(0, 10);
+    await updateDoc(doc(db, "assessments", item.id), {
+      completed: newCompleted,
+      completedAt: newCompleted ? todayStr : null,
+    });
 
     if (newCompleted && !item.xpAwarded) {
       await awardCompletion(item);
@@ -204,9 +208,21 @@ export default function AssessmentsScreen() {
 
     const statsRef = doc(db, "gamification", currentUser.uid);
     const statsSnap = await getDoc(statsRef);
+    const emptyStats: GamificationStats = {
+      userId: currentUser.uid,
+      xp: 0,
+      streak: 0,
+      lastCompletedDate: null,
+      badges: [],
+      heroId: null,
+      pets: [],
+    };
+    // Merge with defaults so any fields missing from an older Firestore
+    // document (e.g. accounts created before pets/heroId existed) get
+    // safe fallback values instead of causing a crash.
     const existing: GamificationStats = statsSnap.exists()
-      ? (statsSnap.data() as GamificationStats)
-      : { userId: currentUser.uid, xp: 0, streak: 0, lastCompletedDate: null, badges: [], heroId: null, pets: [] };
+      ? { ...emptyStats, ...(statsSnap.data() as Partial<GamificationStats>) }
+      : emptyStats;
 
     const { streak, today } = updateStreak(existing.lastCompletedDate, existing.streak);
     const newXp = existing.xp + xpForAssessment(item.priority);
@@ -439,6 +455,8 @@ const styles = StyleSheet.create({
   iconText: { fontWeight: "600" },
   emptyText: { textAlign: "center", color: "#94a3b8", marginTop: 32, paddingHorizontal: 16 },
 });
+
+
 
 
 
