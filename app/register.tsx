@@ -1,4 +1,5 @@
 ﻿import { auth, db } from "@/services/firebase";
+import { useTheme } from "@/components/ThemeContext";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -7,6 +8,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { theme } = useTheme();
 
   // These hold the current value typed into each input field.
   const [name, setName] = useState("");
@@ -52,14 +54,16 @@ export default function RegisterScreen() {
 
       <TextInput
         style={styles.input}
-        placeholder="Full Name" placeholderTextColor="#999999"
+        placeholder="Full Name"
+        placeholderTextColor="#999999"
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
       />
       <TextInput
         style={styles.input}
-        placeholder="Email" placeholderTextColor="#999999"
+        placeholder="Email"
+        placeholderTextColor="#999999"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -67,18 +71,24 @@ export default function RegisterScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password" placeholderTextColor="#999999"
+        placeholder="Password"
+        placeholderTextColor="#999999"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
 
-      <Pressable style={styles.button} onPress={handleRegister} disabled={loading}>
+      {/* Button color now follows the user's chosen app theme. */}
+      <Pressable
+        style={[styles.button, { backgroundColor: theme.primary }]}
+        onPress={handleRegister}
+        disabled={loading}
+      >
         <Text style={styles.buttonText}>{loading ? "Creating account..." : "Register"}</Text>
       </Pressable>
 
       <Pressable onPress={() => router.push("/login")}>
-        <Text style={styles.link}>Already have an account? Log in</Text>
+        <Text style={[styles.link, { color: theme.primary }]}>Already have an account? Log in</Text>
       </Pressable>
     </View>
   );
@@ -90,26 +100,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
     gap: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fafafa",
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
     marginBottom: 16,
     textAlign: "center",
-    color: "#111111",
+    color: "#1e293b",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#e2e8f0",
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: "#111111",
-    backgroundColor: "#f9f9f9",
+    color: "#1e293b",
+    backgroundColor: "#ffffff",
   },
   button: {
-    backgroundColor: "#2563eb",
     borderRadius: 8,
     padding: 14,
     alignItems: "center",
@@ -121,9 +130,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   link: {
-    color: "#2563eb",
     textAlign: "center",
     marginTop: 16,
   },
 });
-

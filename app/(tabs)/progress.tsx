@@ -1,6 +1,7 @@
 ﻿import { auth, db } from "@/services/firebase";
 import { Assessment, Subject } from "@/types";
-import { getSubjectColor } from "@/utils/subjectColors";
+import { MultiSegmentRing, RingSegment } from "@/components/MultiSegmentRing";
+import { buildSubjectColorMap } from "@/utils/subjectColors";
 import { useFocusEffect } from "expo-router";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { useCallback, useState } from "react";
@@ -8,8 +9,6 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 // SafeAreaView automatically adds padding so content doesn't overlap
 // the phone's notch, camera cutout, or status bar.
 import { SafeAreaView } from "react-native-safe-area-context";
-// Used to draw the circular progress ring.
-import Svg, { Circle } from "react-native-svg";
 
 // One row of the per-subject breakdown list.
 type SubjectProgress = {
@@ -19,57 +18,12 @@ type SubjectProgress = {
   completed: number;
 };
 
-// Draws a circular progress ring. Made up of two overlapping circles:
-// a light gray "track" circle (the full ring), and a colored "progress"
-// circle drawn on top, whose visible portion is controlled by
-// strokeDashoffset - this is the standard SVG trick for circular progress.
-function ProgressRing({ percent, size = 140 }: { percent: number; size?: number }) {
-  const strokeWidth = 14;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  // How much of the circle's outline to "hide" so only `percent`% shows as drawn.
-  const strokeDashoffset = circumference * (1 - percent / 100);
-
-  return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size}>
-        {/* Background track - the full, unfilled circle */}
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="#e5e7eb"
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-        {/* Foreground progress - only shows `percent`% of the circle's outline */}
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="#2563eb"
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          rotation={-90}
-          origin={`${size / 2}, ${size / 2}`}
-        />
-      </Svg>
-      {/* Percentage text, centered on top of the ring using absolute positioning */}
-      <View style={styles.ringTextOverlay}>
-        <Text style={styles.ringPercentText}>{percent}%</Text>
-      </View>
-    </View>
-  );
-}
-
 export default function ProgressScreen() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Loads this user's subjects and assessments so we can calculate progress.
   async function loadData() {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -98,16 +52,22 @@ export default function ProgressScreen() {
     }
   }
 
+  // Reload every time this tab comes into focus, so progress always
+  // reflects the latest completed/uncompleted state.
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [])
   );
 
+  // Overall stats across every assessment, regardless of subject.
+  const subjectColorMap = buildSubjectColorMap(subjects);
   const totalCount = assessments.length;
   const completedCount = assessments.filter((a) => a.completed).length;
   const overallPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
 
+  // Build a per-subject breakdown: how many assessments each subject has,
+  // and how many of those are completed.
   const subjectBreakdown: SubjectProgress[] = subjects.map((subject) => {
     const subjectAssessments = assessments.filter((a) => a.subjectId === subject.id);
     const completed = subjectAssessments.filter((a) => a.completed).length;
@@ -119,12 +79,27 @@ export default function ProgressScreen() {
     };
   });
 
+  // Turns each subject's completed count into its share of the FULL
+  // circle (out of the total assessment count across all subjects), so
+  // the segments together add up to exactly the overall completion
+  // percentage - the rest of the ring stays the gray "track" color.
+  const ringSegments: RingSegment[] = subjectBreakdown
+    .filter((s) => s.completed > 0)
+    .map((s) => ({
+      percent: totalCount === 0 ? 0 : (s.completed / totalCount) * 100,
+      color: subjectColorMap[s.subjectId],
+    }));
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>Progress</Text>
 
+      {/* Overall progress ring - now split into colored segments per
+          subject instead of one solid color, so you can see at a glance
+          which subjects make up your completed work. Thicker stroke
+          (24px vs the default 14px) makes the segments easier to read. */}
       <View style={styles.overallCard}>
-        <ProgressRing percent={overallPercent} />
+        <MultiSegmentRing segments={ringSegments} totalPercent={overallPercent} strokeWidth={24} />
         <Text style={styles.overallLabel}>
           {completedCount} of {totalCount} assessments completed
         </Text>
@@ -133,10 +108,12 @@ export default function ProgressScreen() {
       <Text style={styles.sectionHeader}>By Subject</Text>
 
       <FlatList
+        style={{ flex: 1 }}
         data={subjectBreakdown}
         keyExtractor={(item) => item.subjectId}
         refreshing={loading}
         onRefresh={loadData}
+        contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           !loading ? (
             <Text style={styles.emptyText}>
@@ -146,13 +123,11 @@ export default function ProgressScreen() {
         }
         renderItem={({ item }) => {
           const percent = item.total === 0 ? 0 : Math.round((item.completed / item.total) * 100);
-          // Each subject gets its own consistent color from our palette.
-          const color = getSubjectColor(item.subjectId);
+          const color = subjectColorMap[item.subjectId];
           return (
             <View style={styles.subjectCard}>
               <View style={styles.subjectHeaderRow}>
                 <View style={styles.subjectNameRow}>
-                  {/* Small colored dot matching this subject's progress bar color */}
                   <View style={[styles.colorDot, { backgroundColor: color }]} />
                   <Text style={styles.subjectName}>{item.subjectName}</Text>
                 </View>
@@ -177,29 +152,23 @@ export default function ProgressScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ffffff", padding: 16 },
-  title: { fontSize: 24, fontWeight: "bold", color: "#111111", marginBottom: 16 },
+  container: { flex: 1, backgroundColor: "#fafafa", padding: 16 },
+  title: { fontSize: 24, fontWeight: "bold", color: "#1e293b", marginBottom: 16 },
   overallCard: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
     alignItems: "center",
   },
-  ringTextOverlay: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  ringPercentText: { fontSize: 28, fontWeight: "bold", color: "#111111" },
-  overallLabel: { fontSize: 13, color: "#555555", marginTop: 12 },
-  sectionHeader: { fontSize: 16, fontWeight: "700", color: "#111111", marginBottom: 8 },
+  overallLabel: { fontSize: 13, color: "#64748b", marginTop: 12 },
+  sectionHeader: { fontSize: 16, fontWeight: "700", color: "#1e293b", marginBottom: 8 },
   progressTrack: {
     width: "100%",
     height: 10,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e2e8f0",
     borderRadius: 6,
     overflow: "hidden",
   },
@@ -208,9 +177,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   subjectCard: {
-    backgroundColor: "#fafafa",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "#e2e8f0",
     borderRadius: 8,
     padding: 12,
     marginBottom: 10,
@@ -223,9 +192,8 @@ const styles = StyleSheet.create({
   },
   subjectNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   colorDot: { width: 10, height: 10, borderRadius: 5 },
-  subjectName: { fontSize: 15, fontWeight: "600", color: "#111111" },
-  subjectCount: { fontSize: 13, color: "#666666" },
-  emptyText: { textAlign: "center", color: "#999999", marginTop: 32, paddingHorizontal: 16 },
+  subjectName: { fontSize: 15, fontWeight: "600", color: "#1e293b" },
+  subjectCount: { fontSize: 13, color: "#64748b" },
+  emptyText: { textAlign: "center", color: "#94a3b8", marginTop: 32, paddingHorizontal: 16 },
 });
-
 

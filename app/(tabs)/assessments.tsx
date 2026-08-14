@@ -1,5 +1,6 @@
 ﻿import { auth, db } from "@/services/firebase";
 import { Assessment, GamificationStats, Subject } from "@/types";
+import { useTheme } from "@/components/ThemeContext";
 import { showAlert } from "@/utils/alert";
 import { dueDateLabel, getUrgencyLevel } from "@/utils/dueDate";
 import { BADGES, checkNewBadges, petsUnlockedByBadges, updateStreak, xpForAssessment } from "@/utils/gamification";
@@ -42,15 +43,19 @@ function formatDateInput(text: string): string {
   return result;
 }
 
+// Urgency colors are FUNCTIONAL (overdue/urgent/soon/normal), not
+// decorative, so they intentionally do NOT follow the user's chosen
+// app theme - changing them would break the "at a glance" meaning.
 function urgencyStyle(dueDate: string) {
   const level = getUrgencyLevel(dueDate);
   if (level === "overdue") return { borderColor: "#7f1d1d", backgroundColor: "#fca5a5" };
   if (level === "urgent") return { borderColor: "#854d0e", backgroundColor: "#fde047" };
   if (level === "soon") return { borderColor: "#166534", backgroundColor: "#86efac" };
-  return { borderColor: "#eee", backgroundColor: "#fafafa" };
+  return { borderColor: "#e2e8f0", backgroundColor: "#ffffff" };
 }
 
 export default function AssessmentsScreen() {
+  const { theme } = useTheme();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -181,8 +186,6 @@ export default function AssessmentsScreen() {
     }
   }
 
-  // Toggles an assessment's completed status. Awarding XP/streak/badges/pets
-  // only happens the first time it is marked complete (see awardCompletion).
   async function handleToggleComplete(item: Assessment) {
     const newCompleted = !item.completed;
     await updateDoc(doc(db, "assessments", item.id), { completed: newCompleted });
@@ -193,32 +196,20 @@ export default function AssessmentsScreen() {
     loadData();
   }
 
-  // Handles all gamification side-effects of completing an assessment for
-  // the first time: grants XP, updates the daily streak, checks for newly
-  // earned badges, and unlocks any pets tied to those badges.
   async function awardCompletion(item: Assessment) {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
-    // Mark this specific assessment so it can never grant XP again,
-    // even if the user un-ticks and re-ticks it later.
     await updateDoc(doc(db, "assessments", item.id), { xpAwarded: true });
 
-    // Load this user's existing gamification stats, or start fresh
-    // if this is their very first completed assessment.
     const statsRef = doc(db, "gamification", currentUser.uid);
     const statsSnap = await getDoc(statsRef);
     const existing: GamificationStats = statsSnap.exists()
       ? (statsSnap.data() as GamificationStats)
       : { userId: currentUser.uid, xp: 0, streak: 0, lastCompletedDate: null, badges: [], heroId: null, pets: [] };
 
-    // Work out today's streak based on when they last completed something.
     const { streak, today } = updateStreak(existing.lastCompletedDate, existing.streak);
-
-    // Add XP based on this assessment's priority.
     const newXp = existing.xp + xpForAssessment(item.priority);
-
-    // Total completed count (including this one) is used for milestone badges.
     const totalCompleted = assessments.filter((a) => a.completed).length + 1;
 
     const updatedStats: GamificationStats = {
@@ -229,22 +220,17 @@ export default function AssessmentsScreen() {
       lastCompletedDate: today,
     };
 
-    // Check if this update just unlocked any new badges.
     const newlyEarnedBadges = checkNewBadges(updatedStats, totalCompleted);
     if (newlyEarnedBadges.length > 0) {
       updatedStats.badges = [...existing.badges, ...newlyEarnedBadges];
     }
-
-    // Check if any of those new badges also unlock a pet companion.
     const newlyEarnedPets = petsUnlockedByBadges(newlyEarnedBadges, existing.pets);
     if (newlyEarnedPets.length > 0) {
       updatedStats.pets = [...existing.pets, ...newlyEarnedPets];
     }
 
-    // Save the updated stats document (creates it if it's the first time).
     await setDoc(statsRef, updatedStats);
 
-    // Show a quick alert if a new badge (and/or pet) was just unlocked.
     if (newlyEarnedBadges.length > 0) {
       const badgeNames = newlyEarnedBadges
         .map((id) => BADGES.find((b) => b.id === id)?.name)
@@ -277,13 +263,15 @@ export default function AssessmentsScreen() {
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Assessment title (e.g. Midterm Exam)" placeholderTextColor="#999999"
+          placeholder="Assessment title (e.g. Midterm Exam)"
+          placeholderTextColor="#999999"
           value={title}
           onChangeText={setTitle}
         />
         <TextInput
           style={styles.input}
-          placeholder="Due date (e.g. 2026-09-15)" placeholderTextColor="#999999"
+          placeholder="Due date (e.g. 2026-09-15)"
+          placeholderTextColor="#999999"
           value={dueDate}
           onChangeText={(text) => setDueDate(formatDateInput(text))}
           keyboardType="numeric"
@@ -291,7 +279,8 @@ export default function AssessmentsScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="Estimated hours (e.g. 3)" placeholderTextColor="#999999"
+          placeholder="Estimated hours (e.g. 3)"
+          placeholderTextColor="#999999"
           value={estimatedHours}
           onChangeText={setEstimatedHours}
           keyboardType="numeric"
@@ -301,7 +290,10 @@ export default function AssessmentsScreen() {
           {subjects.map((s) => (
             <Pressable
               key={s.id}
-              style={[styles.chip, subjectId === s.id && styles.chipSelected]}
+              style={[
+                styles.chip,
+                subjectId === s.id && { backgroundColor: theme.primary, borderColor: theme.primary },
+              ]}
               onPress={() => setSubjectId(s.id)}
             >
               <Text style={subjectId === s.id ? styles.chipTextSelected : styles.chipText}>
@@ -315,7 +307,10 @@ export default function AssessmentsScreen() {
           {PRIORITIES.map((p) => (
             <Pressable
               key={p}
-              style={[styles.chip, priority === p && styles.chipSelected]}
+              style={[
+                styles.chip,
+                priority === p && { backgroundColor: theme.primary, borderColor: theme.primary },
+              ]}
               onPress={() => setPriority(p)}
             >
               <Text style={priority === p ? styles.chipTextSelected : styles.chipText}>{p}</Text>
@@ -323,7 +318,10 @@ export default function AssessmentsScreen() {
           ))}
         </View>
         <View style={styles.formButtons}>
-          <Pressable style={styles.button} onPress={handleSave}>
+          <Pressable
+            style={[styles.button, { backgroundColor: theme.primary }]}
+            onPress={handleSave}
+          >
             <Text style={styles.buttonText}>
               {editingId ? "Update Assessment" : "Add Assessment"}
             </Text>
@@ -340,15 +338,17 @@ export default function AssessmentsScreen() {
         data={assessments}
         keyExtractor={(item) => item.id}
         refreshing={loading}
-        contentContainerStyle={{ paddingBottom: 40 }}
         onRefresh={loadData}
+        contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           !loading ? <Text style={styles.emptyText}>No assessments yet.</Text> : null
         }
         renderItem={({ item }) => (
           <View style={[styles.card, urgencyStyle(item.dueDate)]}>
             <Pressable onPress={() => handleToggleComplete(item)} style={styles.checkbox}>
-              <Text style={styles.checkboxText}>{item.completed ? "[Done]" : "[ ]"}</Text>
+              <Text style={[styles.checkboxText, { color: "#1e293b" }]}>
+                {item.completed ? "[Done]" : "[ ]"}
+              </Text>
             </Pressable>
             <View style={{ flex: 1 }}>
               <Text
@@ -368,7 +368,7 @@ export default function AssessmentsScreen() {
               )}
             </View>
             <Pressable onPress={() => handleEdit(item)} style={styles.iconButton}>
-              <Text style={styles.iconText}>Edit</Text>
+              <Text style={[styles.iconText, { color: "#1e293b" }]}>Edit</Text>
             </Pressable>
             <Pressable onPress={() => handleDelete(item.id)} style={styles.iconButton}>
               <Text style={[styles.iconText, { color: "#dc2626" }]}>Delete</Text>
@@ -381,34 +381,32 @@ export default function AssessmentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ffffff", padding: 16 },
-  title: { fontSize: 24, fontWeight: "bold", color: "#111111", marginBottom: 12 },
+  container: { flex: 1, backgroundColor: "#fafafa", padding: 16 },
+  title: { fontSize: 24, fontWeight: "bold", color: "#1e293b", marginBottom: 12 },
   form: { gap: 8, marginBottom: 16 },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#e2e8f0",
     borderRadius: 8,
     padding: 10,
     fontSize: 16,
-    color: "#111111",
-    backgroundColor: "#f9f9f9",
+    color: "#1e293b",
+    backgroundColor: "#ffffff",
   },
-  label: { fontSize: 13, color: "#555", marginTop: 4 },
+  label: { fontSize: 13, color: "#64748b", marginTop: 4 },
   rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#e2e8f0",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#f9f9f9",
+    backgroundColor: "#ffffff",
   },
-  chipSelected: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
   chipText: { color: "#333" },
   chipTextSelected: { color: "#fff", fontWeight: "600" },
   formButtons: { flexDirection: "row", gap: 8, marginTop: 8 },
   button: {
-    backgroundColor: "#2563eb",
     borderRadius: 8,
     padding: 12,
     alignItems: "center",
@@ -416,13 +414,13 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontWeight: "600" },
   cancelButton: {
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e2e8f0",
     borderRadius: 8,
     padding: 12,
     alignItems: "center",
     flex: 1,
   },
-  cancelButtonText: { color: "#111111", fontWeight: "600" },
+  cancelButtonText: { color: "#1e293b", fontWeight: "600" },
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -433,13 +431,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   checkbox: { paddingRight: 4 },
-  checkboxText: { fontSize: 14, fontWeight: "700", color: "#2563eb" },
-  cardTitle: { fontSize: 16, fontWeight: "600", color: "#111111" },
-  cardSubtext: { fontSize: 12, color: "#666666", marginTop: 2 },
+  checkboxText: { fontSize: 14, fontWeight: "700" },
+  cardTitle: { fontSize: 16, fontWeight: "600", color: "#1e293b" },
+  cardSubtext: { fontSize: 12, color: "#64748b", marginTop: 2 },
   urgencyText: { fontSize: 12, fontWeight: "700", color: "#dc2626", marginTop: 2 },
   iconButton: { paddingHorizontal: 6, paddingVertical: 4 },
-  iconText: { color: "#2563eb", fontWeight: "600" },
-  emptyText: { textAlign: "center", color: "#999999", marginTop: 32, paddingHorizontal: 16 },
+  iconText: { fontWeight: "600" },
+  emptyText: { textAlign: "center", color: "#94a3b8", marginTop: 32, paddingHorizontal: 16 },
 });
 
 

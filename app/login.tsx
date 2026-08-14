@@ -1,14 +1,13 @@
 ﻿import { auth } from "@/services/firebase";
+import { useTheme } from "@/components/ThemeContext";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput } from "react-native";
-// SafeAreaView automatically adds padding so content doesn't overlap
-// the phone's notch, camera cutout, or status bar.
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { theme } = useTheme();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +24,7 @@ export default function LoginScreen() {
       // Firebase checks the email/password against the account we created earlier.
       await signInWithEmailAndPassword(auth, email, password);
 
-      // Login successful â€” go to the dashboard.
+      // Login successful - go to the dashboard.
       router.replace("/(tabs)/dashboard");
     } catch (error: any) {
       Alert.alert("Login failed", error.message);
@@ -35,12 +34,13 @@ export default function LoginScreen() {
   }
 
   return (
-     <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Text style={styles.title}>Welcome Back</Text>
 
       <TextInput
         style={styles.input}
-        placeholder="Email" placeholderTextColor="#999999"
+        placeholder="Email"
+        placeholderTextColor="#999999"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -48,20 +48,27 @@ export default function LoginScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password" placeholderTextColor="#999999"
+        placeholder="Password"
+        placeholderTextColor="#999999"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
 
-      <Pressable style={styles.button} onPress={handleLogin} disabled={loading}>
+      {/* Button color now follows the user's chosen app theme, instead
+          of a hardcoded blue that ignored their theme choice. */}
+      <Pressable
+        style={[styles.button, { backgroundColor: theme.primary }]}
+        onPress={handleLogin}
+        disabled={loading}
+      >
         <Text style={styles.buttonText}>{loading ? "Logging in..." : "Log In"}</Text>
       </Pressable>
 
       <Pressable onPress={() => router.push("/register")}>
-        <Text style={styles.link}>Don't have an account? Register</Text>
+        <Text style={[styles.link, { color: theme.primary }]}>Don't have an account? Register</Text>
       </Pressable>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -71,26 +78,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
     gap: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fafafa",
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
     marginBottom: 16,
     textAlign: "center",
-    color: "#111111",
+    color: "#1e293b",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#e2e8f0",
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: "#111111",
-    backgroundColor: "#f9f9f9",
+    color: "#1e293b",
+    backgroundColor: "#ffffff",
   },
   button: {
-    backgroundColor: "#2563eb",
     borderRadius: 8,
     padding: 14,
     alignItems: "center",
@@ -102,7 +108,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   link: {
-    color: "#2563eb",
     textAlign: "center",
     marginTop: 16,
   },

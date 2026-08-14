@@ -1,5 +1,6 @@
 ﻿// A palette of distinct, visually distinguishable colors used to color-code
-// subjects consistently across the app (e.g. in Progress bars/rings).
+// subjects consistently across the app (e.g. in Progress rings, Subjects
+// list, Dashboard).
 const SUBJECT_COLORS = [
   "#2563eb", // blue
   "#16a34a", // green
@@ -13,16 +14,16 @@ const SUBJECT_COLORS = [
   "#0d9488", // dark teal
 ];
 
-// Deterministically picks a color for a given subject ID, so the SAME
-// subject always gets the SAME color (even across reloads), and colors
-// are spread out across the palette rather than repeating immediately.
-export function getSubjectColor(subjectId: string): string {
-  // Turn the subject ID into a number by summing its character codes.
-  let hash = 0;
-  for (let i = 0; i < subjectId.length; i++) {
-    hash += subjectId.charCodeAt(i);
-  }
-  // Use that number to pick a consistent index into the palette.
-  const index = hash % SUBJECT_COLORS.length;
-  return SUBJECT_COLORS[index];
+// Builds a lookup table assigning each subject a DISTINCT color, based on
+// its position within the given list (sorted by creation date, so the
+// assignment is stable and doesn't shuffle as new subjects are added).
+// This avoids the color collisions that a hash-based approach can produce
+// when two different subject IDs happen to hash to the same palette slot.
+export function buildSubjectColorMap(subjects: { id: string; createdAt: string }[]): Record<string, string> {
+  const sorted = [...subjects].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const map: Record<string, string> = {};
+  sorted.forEach((subject, index) => {
+    map[subject.id] = SUBJECT_COLORS[index % SUBJECT_COLORS.length];
+  });
+  return map;
 }

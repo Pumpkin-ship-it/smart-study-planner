@@ -12,7 +12,10 @@ export interface Theme {
   primaryLight: string;
 }
 
+// Mint is first in the list, making it the default theme for new users -
+// chosen for a soft, calm, focused feel appropriate for a study app.
 export const THEMES: Theme[] = [
+  { id: "mint", name: "Mint", primary: "#34d399", primaryLight: "#d1fae5" },
   { id: "blue", name: "Blue", primary: "#2563eb", primaryLight: "#eef2ff" },
   { id: "purple", name: "Purple", primary: "#7c3aed", primaryLight: "#f3e8ff" },
   { id: "green", name: "Green", primary: "#16a34a", primaryLight: "#dcfce7" },
@@ -37,7 +40,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 // persists across app restarts (this is a plain local preference, not
 // user account data, so it does not need to live in Firestore).
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [themeId, setThemeIdState] = useState("blue");
+  const [themeId, setThemeIdState] = useState("mint");
 
   // Load the saved theme choice when the app starts.
   useEffect(() => {

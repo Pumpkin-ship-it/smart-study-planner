@@ -4,7 +4,7 @@ import { useTheme } from "@/components/ThemeContext";
 import { auth, db } from "@/services/firebase";
 import { Assessment, GamificationStats, HeroId, Subject } from "@/types";
 import { dueDateLabel, getUrgencyLevel } from "@/utils/dueDate";
-import { getSubjectColor } from "@/utils/subjectColors";
+import { buildSubjectColorMap } from "@/utils/subjectColors";
 import { calculateLevel, levelProgress } from "@/utils/gamification";
 import { useFocusEffect, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
@@ -24,9 +24,9 @@ function getInitials(name: string): string {
 
 // Small colored square icon shown next to each upcoming assessment,
 // colored to match its subject (same color used in Subjects/Progress).
-function AssessmentIcon({ subjectId }: { subjectId: string }) {
+function AssessmentIcon({ color }: { color: string }) {
   return (
-    <View style={[styles.assessmentIconBox, { backgroundColor: getSubjectColor(subjectId) }]}>
+    <View style={[styles.assessmentIconBox, { backgroundColor: color }]}>
       <Text style={styles.assessmentIconText}>[ ]</Text>
     </View>
   );
@@ -91,6 +91,7 @@ export default function DashboardScreen() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  const subjectColorMap = buildSubjectColorMap(subjects);
   const totalCount = assessments.length;
   const completedCount = assessments.filter((a) => a.completed).length;
   const overdueCount = assessments.filter((a) => !a.completed && a.dueDate < todayStr).length;
@@ -210,7 +211,7 @@ export default function DashboardScreen() {
                 const urgency = getUrgencyLevel(item.dueDate);
                 return (
                   <View key={item.id} style={styles.upcomingCard}>
-                    <AssessmentIcon subjectId={item.subjectId} />
+                    <AssessmentIcon color={subjectColorMap[item.subjectId]} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.upcomingTitle}>{item.title}</Text>
                       <Text style={styles.upcomingSubtext}>{subjectName(item.subjectId)}</Text>
@@ -251,7 +252,7 @@ export default function DashboardScreen() {
                   return (
                     <View key={s.id} style={styles.subjectLegendRow}>
                       <View
-                        style={[styles.legendDot, { backgroundColor: getSubjectColor(s.id) }]}
+                        style={[styles.legendDot, { backgroundColor: subjectColorMap[s.id] }]}
                       />
                       <Text style={styles.subjectLegendText}>{s.name}</Text>
                       <Text style={styles.subjectLegendPercent}>{pct}%</Text>
@@ -416,6 +417,8 @@ const styles = StyleSheet.create({
   focusCardSubtext: { fontSize: 12, color: "#555555", marginTop: 2 },
   focusCardArrow: { fontSize: 18, fontWeight: "700", marginLeft: 8 },
 });
+
+
 
 
 

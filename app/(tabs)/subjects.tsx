@@ -1,6 +1,7 @@
 ﻿import { auth, db } from "@/services/firebase";
 import { Subject } from "@/types";
-import { getSubjectColor } from "@/utils/subjectColors";
+import { useTheme } from "@/components/ThemeContext";
+import { buildSubjectColorMap } from "@/utils/subjectColors";
 import { useFocusEffect } from "expo-router";
 import {
   addDoc,
@@ -29,6 +30,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SubjectsScreen() {
+  const { theme } = useTheme();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -153,18 +155,25 @@ export default function SubjectsScreen() {
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Subject name (e.g. Biology)" placeholderTextColor="#999999"
+          placeholder="Subject name (e.g. Biology)"
+          placeholderTextColor="#999999"
           value={name}
           onChangeText={setName}
         />
         <TextInput
           style={styles.input}
-          placeholder="Code (optional, e.g. BIO301)" placeholderTextColor="#999999"
+          placeholder="Code (optional, e.g. BIO301)"
+          placeholderTextColor="#999999"
           value={code}
           onChangeText={setCode}
         />
         <View style={styles.formButtons}>
-          <Pressable style={styles.button} onPress={handleSave}>
+          {/* Button color now follows the app theme instead of a
+              hardcoded blue. */}
+          <Pressable
+            style={[styles.button, { backgroundColor: theme.primary }]}
+            onPress={handleSave}
+          >
             <Text style={styles.buttonText}>
               {editingId ? "Update Subject" : "Add Subject"}
             </Text>
@@ -183,18 +192,21 @@ export default function SubjectsScreen() {
         data={subjects}
         keyExtractor={(item) => item.id}
         refreshing={loading}
-        contentContainerStyle={{ paddingBottom: 40 }}
         onRefresh={loadSubjects}
+        contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           !loading ? (
             <Text style={styles.emptyText}>No subjects yet. Add one above.</Text>
           ) : null
         }
         renderItem={({ item }) => {
+          const subjectColorMap = buildSubjectColorMap(subjects);
           // Each subject gets its own consistent color, matching the
           // Progress screen, so the same subject always looks the same
-          // color everywhere in the app.
-          const color = getSubjectColor(item.id);
+          // color everywhere in the app. This is a functional color
+          // (identifying which subject is which), not a theme color,
+          // so it stays independent of the user's chosen app theme.
+          const color = subjectColorMap[item.id];
           return (
             <View style={styles.subjectCard}>
               {/* Colored dot identifying this subject */}
@@ -204,7 +216,7 @@ export default function SubjectsScreen() {
                 {item.code ? <Text style={styles.subjectCode}>{item.code}</Text> : null}
               </View>
               <Pressable onPress={() => handleEdit(item)} style={styles.iconButton}>
-                <Text style={styles.iconText}>Edit</Text>
+                <Text style={[styles.iconText, { color: theme.primary }]}>Edit</Text>
               </Pressable>
               <Pressable onPress={() => handleDelete(item.id)} style={styles.iconButton}>
                 <Text style={[styles.iconText, { color: "#dc2626" }]}>Delete</Text>
@@ -220,13 +232,13 @@ export default function SubjectsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fafafa",
     padding: 16,
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#111111",
+    color: "#1e293b",
     marginBottom: 12,
   },
   form: {
@@ -235,19 +247,18 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#e2e8f0",
     borderRadius: 8,
     padding: 10,
     fontSize: 16,
-    color: "#111111",
-    backgroundColor: "#f9f9f9",
+    color: "#1e293b",
+    backgroundColor: "#ffffff",
   },
   formButtons: {
     flexDirection: "row",
     gap: 8,
   },
   button: {
-    backgroundColor: "#2563eb",
     borderRadius: 8,
     padding: 12,
     alignItems: "center",
@@ -258,14 +269,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   cancelButton: {
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e2e8f0",
     borderRadius: 8,
     padding: 12,
     alignItems: "center",
     flex: 1,
   },
   cancelButtonText: {
-    color: "#111111",
+    color: "#1e293b",
     fontWeight: "600",
   },
   subjectCard: {
@@ -273,21 +284,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 12,
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "#e2e8f0",
     borderRadius: 8,
     marginBottom: 8,
-    backgroundColor: "#fafafa",
+    backgroundColor: "#ffffff",
     gap: 10,
   },
   colorDot: { width: 12, height: 12, borderRadius: 6 },
   subjectName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#111111",
+    color: "#1e293b",
   },
   subjectCode: {
     fontSize: 13,
-    color: "#666666",
+    color: "#64748b",
     marginTop: 2,
   },
   iconButton: {
@@ -295,16 +306,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   iconText: {
-    color: "#2563eb",
     fontWeight: "600",
   },
   emptyText: {
     textAlign: "center",
-    color: "#999999",
+    color: "#94a3b8",
     marginTop: 32,
   },
 });
-
-
-
 
