@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { Animated, Image, StyleSheet, View } from "react-native";
 
 // A single day indicator in the streak week row, built from two fixed
 // rows so the letter and flame icon always sit at the SAME height:
@@ -37,14 +37,16 @@ export function StreakWeekDay({
 
   return (
     <View style={styles.column}>
-      {/* Top row: letter (inactive) OR flame (active), same fixed height either way */}
+      {/* Top row: letter (inactive) OR flame icon image (active), same
+          fixed height either way */}
       <View style={styles.topRow}>
         <Animated.Text style={[styles.letterTop, { opacity: inactiveOpacity }]}>
           {label}
         </Animated.Text>
-        <Animated.Text style={[styles.flameIcon, { opacity: activeOpacity }]}>
-          [Fire]
-        </Animated.Text>
+        <Animated.Image
+          source={require("../assets/icons/fire.png")}
+          style={[styles.flameIcon, { opacity: activeOpacity }]}
+        />
       </View>
 
       {/* Bottom row: empty gray circle (inactive) OR the letter (active) */}
@@ -81,9 +83,8 @@ const styles = StyleSheet.create({
   },
   flameIcon: {
     position: "absolute",
-    fontSize: 8,
-    fontWeight: "700",
-    color: "#ea580c",
+    width: 14,
+    height: 14,
   },
   bottomRow: {
     width: 26,
